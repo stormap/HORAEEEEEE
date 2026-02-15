@@ -1,9 +1,8 @@
 /**
- * Horae - 时光记忆插件 
- * 基于时间锚点的AI记忆增强系统
- * 
- * 作者: SenriYuki
- * 版本: 1.0.0
+ * Horae - Plugin Ký Ức Thời Gian
+ * Hệ thống tăng cường trí nhớ AI dựa trên mốc thời gian
+ * * Tác giả: SenriYuki
+ * Phiên bản: 1.0.0
  */
 
 import { renderExtensionTemplateAsync, getContext, extension_settings } from '/scripts/extensions.js';
@@ -14,20 +13,20 @@ import { horaeManager, createEmptyMeta } from './core/horaeManager.js';
 import { calculateRelativeTime, calculateDetailedRelativeTime, formatRelativeTime, generateTimeReference, getCurrentSystemTime, formatStoryDate, formatFullDateTime, parseStoryDate } from './utils/timeUtils.js';
 
 // ============================================
-// 常量定义
+// Định nghĩa hằng số
 // ============================================
 const EXTENSION_NAME = 'horae';
 const EXTENSION_FOLDER = `third-party/SillyTavern-Horae`;
 const TEMPLATE_PATH = `${EXTENSION_FOLDER}/assets/templates`;
 const VERSION = '1.0.0';
 
-// 配套正则规则（自动注入ST原生正则系统）
+// Quy tắc Regex đi kèm (Tự động tiêm vào hệ thống Regex gốc của ST)
 const HORAE_REGEX_RULES = [
     {
         id: 'horae_hide',
-        scriptName: 'Horae - 隐藏状态标签',
-        description: '隐藏<horae>状态标签，不显示在正文，不发送给AI',
-        findRegex: '/(?:<horae>[\\s\\S]*?<\\/horae>|<!--horae[\\s\\S]*?-->|(?:^|\\n)(?:time|location|atmosphere|characters|costume|item-?!{0,2}|affection|npc|agenda-?):[^\\n]+(?:\\n(?:time|location|atmosphere|characters|costume|item-?!{0,2}|affection|npc|agenda-?):[^\\n]+)*)/gim',
+        scriptName: 'Horae - Ẩn thẻ trạng thái',
+        description: 'Ẩn thẻ trạng thái <horae>, không hiển thị trong văn bản chính, không gửi cho AI',
+        findRegex: '/(?:<horae>[\\s\\S]*?<\\/horae>||(?:^|\\n)(?:time|location|atmosphere|characters|costume|item-?!{0,2}|affection|npc|agenda-?):[^\\n]+(?:\\n(?:time|location|atmosphere|characters|costume|item-?!{0,2}|affection|npc|agenda-?):[^\\n]+)*)/gim',
         replaceString: '',
         trimStrings: [],
         placement: [2],
@@ -41,8 +40,8 @@ const HORAE_REGEX_RULES = [
     },
     {
         id: 'horae_event_display_only',
-        scriptName: 'Horae - 隐藏事件标签',
-        description: '隐藏<horaeevent>事件标签的显示，但仍发送给AI用于追溯剧情',
+        scriptName: 'Horae - Ẩn thẻ sự kiện',
+        description: 'Ẩn hiển thị thẻ sự kiện <horaeevent>, nhưng vẫn gửi cho AI để truy xuất cốt truyện',
         findRegex: '/<horaeevent>[\\s\\S]*?<\\/horaeevent>/gim',
         replaceString: '',
         trimStrings: [],
@@ -57,8 +56,8 @@ const HORAE_REGEX_RULES = [
     },
     {
         id: 'horae_table_hide',
-        scriptName: 'Horae - 隐藏表格标签',
-        description: '隐藏<horaetable>标签，不显示在正文，不发送给AI',
+        scriptName: 'Horae - Ẩn thẻ bảng',
+        description: 'Ẩn thẻ <horaetable>, không hiển thị trong văn bản chính, không gửi cho AI',
         findRegex: '/<horaetable[:\\uff1a][\\s\\S]*?<\\/horaetable>/gim',
         replaceString: '',
         trimStrings: [],
@@ -74,7 +73,7 @@ const HORAE_REGEX_RULES = [
 ];
 
 // ============================================
-// 默认设置
+// Cài đặt mặc định
 // ============================================
 const DEFAULT_SETTINGS = {
     enabled: true,
@@ -85,33 +84,33 @@ const DEFAULT_SETTINGS = {
     injectionPosition: 1,
     lastStoryDate: '',
     lastStoryTime: '',
-    favoriteNpcs: [],  // 用户标记的星标NPC列表
-    pinnedNpcs: [],    // 用户手动标记的重要角色列表（特殊边框）
-    // 发送给AI的内容控制
-    sendTimeline: true,    // 发送剧情轨迹（关闭则无法计算相对时间）
-    sendCharacters: true,  // 发送角色信息（服装、好感度）
-    sendItems: true,       // 发送物品栏
-    customTables: []       // 自定义表格 [{id, name, rows, cols, data, prompt}]
+    favoriteNpcs: [],  // Danh sách NPC được người dùng đánh dấu sao
+    pinnedNpcs: [],    // Danh sách nhân vật quan trọng do người dùng đánh dấu thủ công (viền đặc biệt)
+    // Kiểm soát nội dung gửi cho AI
+    sendTimeline: true,    // Gửi quỹ đạo cốt truyện (nếu tắt sẽ không thể tính thời gian tương đối)
+    sendCharacters: true,  // Gửi thông tin nhân vật (trang phục, độ hảo cảm)
+    sendItems: true,       // Gửi túi đồ
+    customTables: []       // Bảng tùy chỉnh [{id, name, rows, cols, data, prompt}]
 };
 
 // ============================================
-// 全局变量
+// Biến toàn cục
 // ============================================
 let settings = { ...DEFAULT_SETTINGS };
 let doNavbarIconClick = null;
 let isInitialized = false;
-let itemsMultiSelectMode = false;  // 物品多选模式
-let selectedItems = new Set();     // 选中的物品名称
-let longPressTimer = null;         // 长按计时器
-let agendaMultiSelectMode = false; // 待办多选模式
-let selectedAgendaIndices = new Set(); // 选中的待办索引
-let agendaLongPressTimer = null;   // 待办长按计时器
+let itemsMultiSelectMode = false;  // Chế độ đa chọn vật phẩm
+let selectedItems = new Set();     // Tên vật phẩm đã chọn
+let longPressTimer = null;         // Bộ đếm thời gian nhấn giữ
+let agendaMultiSelectMode = false; // Chế độ đa chọn việc cần làm
+let selectedAgendaIndices = new Set(); // Chỉ mục việc cần làm đã chọn
+let agendaLongPressTimer = null;   // Bộ đếm thời gian nhấn giữ việc cần làm
 
 // ============================================
-// 工具函数
+// Hàm tiện ích
 // ============================================
 
-/** 自动注入配套正则到ST原生正则系统（首次安装时自动执行，用户可在正则面板管理） */
+/** Tự động tiêm Regex đi kèm vào hệ thống Regex gốc của ST (Tự động thực hiện khi cài đặt lần đầu, người dùng có thể quản lý trong bảng Regex) */
 function ensureRegexRules() {
     if (!extension_settings.regex) extension_settings.regex = [];
 
@@ -122,7 +121,7 @@ function ensureRegexRules() {
             extension_settings.regex.push({ ...rule });
             injected++;
         } else {
-            // 已存在则同步更新正则内容（版本升级时自动修复），保留用户的 disabled 状态
+            // Nếu đã tồn tại thì đồng bộ cập nhật nội dung Regex (tự động sửa khi nâng cấp phiên bản), giữ nguyên trạng thái disabled của người dùng
             const userDisabled = extension_settings.regex[idx].disabled;
             extension_settings.regex[idx] = { ...rule, disabled: userDisabled };
         }
@@ -130,24 +129,24 @@ function ensureRegexRules() {
 
     if (injected > 0) {
         saveSettingsDebounced();
-        console.log(`[Horae] 已自动注入 ${injected} 条配套正则规则`);
+        console.log(`[Horae] Đã tự động thêm ${injected} quy tắc Regex đi kèm`);
     }
 }
 
-/** 获取HTML模板 */
+/** Lấy mẫu HTML */
 async function getTemplate(name) {
     return await renderExtensionTemplateAsync(TEMPLATE_PATH, name);
 }
 
 /**
- * 检查是否为新版导航栏
+ * Kiểm tra xem có phải phiên bản thanh điều hướng mới không
  */
 function isNewNavbarVersion() {
     return typeof doNavbarIconClick === 'function';
 }
 
 /**
- * 初始化导航栏点击函数
+ * Khởi tạo hàm click thanh điều hướng
  */
 async function initNavbarFunction() {
     try {
@@ -156,12 +155,12 @@ async function initNavbarFunction() {
             doNavbarIconClick = scriptModule.doNavbarIconClick;
         }
     } catch (error) {
-        console.warn(`[Horae] doNavbarIconClick 不可用，使用旧版抽屉模式`);
+        console.warn(`[Horae] doNavbarIconClick không khả dụng, sử dụng chế độ ngăn kéo cũ`);
     }
 }
 
 /**
- * 加载设置
+ * Tải cài đặt
  */
 function loadSettings() {
     if (extension_settings[EXTENSION_NAME]) {
@@ -172,7 +171,7 @@ function loadSettings() {
 }
 
 /**
- * 保存设置
+ * Lưu cài đặt
  */
 function saveSettings() {
     extension_settings[EXTENSION_NAME] = settings;
@@ -180,7 +179,7 @@ function saveSettings() {
 }
 
 /**
- * 显示 Toast 消息
+ * Hiển thị thông báo Toast
  */
 function showToast(message, type = 'info') {
     if (window.toastr) {
@@ -190,7 +189,7 @@ function showToast(message, type = 'info') {
     }
 }
 
-/** 获取当前对话的自定义表格 */
+/** Lấy bảng tùy chỉnh của cuộc trò chuyện hiện tại */
 function getChatTables() {
     const context = getContext();
     if (!context?.chat?.length) return [];
@@ -200,7 +199,7 @@ function getChatTables() {
         return firstMessage.horae_meta.customTables;
     }
     
-    // 兼容旧版：检查chat数组属性
+    // Tương thích cũ: kiểm tra thuộc tính mảng chat
     if (context.chat.horae_tables) {
         return context.chat.horae_tables;
     }
@@ -208,7 +207,7 @@ function getChatTables() {
     return [];
 }
 
-/** 设置当前对话的自定义表格 */
+/** Đặt bảng tùy chỉnh cho cuộc trò chuyện hiện tại */
 function setChatTables(tables) {
     const context = getContext();
     if (!context?.chat?.length) return;
@@ -217,7 +216,7 @@ function setChatTables(tables) {
         context.chat[0].horae_meta = createEmptyMeta();
     }
     
-    // 快照 baseData 用于回退
+    // Snapshot baseData để rollback
     for (const table of tables) {
         table.baseData = JSON.parse(JSON.stringify(table.data || {}));
         table.baseRows = table.rows || 2;
@@ -229,11 +228,11 @@ function setChatTables(tables) {
 }
 
 // ============================================
-// 待办事项（Agenda）存储 — 跟随当前对话
+// Lưu trữ Việc cần làm (Agenda) — Theo cuộc trò chuyện hiện tại
 // ============================================
 
 /**
- * 获取用户手动创建的待办事项（存储在 chat[0]）
+ * Lấy việc cần làm do người dùng tạo thủ công (lưu trong chat[0])
  */
 function getUserAgenda() {
     const context = getContext();
@@ -247,7 +246,7 @@ function getUserAgenda() {
 }
 
 /**
- * 设置用户手动创建的待办事项（存储在 chat[0]）
+ * Đặt việc cần làm do người dùng tạo thủ công (lưu trong chat[0])
  */
 function setUserAgenda(agenda) {
     const context = getContext();
@@ -262,13 +261,13 @@ function setUserAgenda(agenda) {
 }
 
 /**
- * 获取所有待办事项（用户 + AI写入），统一格式返回
- * 每项: { text, date, source: 'user'|'ai', done, createdAt, _msgIndex? }
+ * Lấy tất cả việc cần làm (Người dùng + AI ghi), trả về định dạng thống nhất
+ * Mỗi mục: { text, date, source: 'user'|'ai', done, createdAt, _msgIndex? }
  */
 function getAllAgenda() {
     const all = [];
     
-    // 1. 用户手动创建的
+    // 1. Người dùng tạo thủ công
     const userItems = getUserAgenda();
     for (const item of userItems) {
         all.push({
@@ -282,14 +281,14 @@ function getAllAgenda() {
         });
     }
     
-    // 2. AI写入的（存储在各条消息的 horae_meta.agenda）
+    // 2. AI ghi (lưu trong horae_meta.agenda của từng tin nhắn)
     const context = getContext();
     if (context?.chat) {
         for (let i = 1; i < context.chat.length; i++) {
             const meta = context.chat[i].horae_meta;
             if (meta?.agenda?.length > 0) {
                 for (const item of meta.agenda) {
-                    // 去重：检查是否已存在相同内容
+                    // Khử trùng lặp: Kiểm tra xem nội dung tương tự đã tồn tại chưa
                     const isDupe = all.some(a => a.text === item.text);
                     if (!isDupe) {
                         all.push({
@@ -312,7 +311,7 @@ function getAllAgenda() {
 }
 
 /**
- * 根据全局索引切换待办完成状态
+ * Chuyển đổi trạng thái hoàn thành việc cần làm dựa trên chỉ mục toàn cục
  */
 function toggleAgendaDone(agendaItem, done) {
     const context = getContext();
@@ -320,7 +319,7 @@ function toggleAgendaDone(agendaItem, done) {
     
     if (agendaItem._store === 'user') {
         const agenda = getUserAgenda();
-        // 按text查找（更可靠）
+        // Tìm theo text (đáng tin cậy hơn)
         const found = agenda.find(a => a.text === agendaItem.text);
         if (found) {
             found.done = done;
@@ -339,7 +338,7 @@ function toggleAgendaDone(agendaItem, done) {
 }
 
 /**
- * 删除指定的待办事项
+ * Xóa việc cần làm được chỉ định
  */
 function deleteAgendaItem(agendaItem) {
     const context = getContext();
@@ -365,7 +364,7 @@ function deleteAgendaItem(agendaItem) {
 }
 
 /**
- * 导出表格为JSON
+ * Xuất bảng dưới dạng JSON
  */
 function exportTable(tableIndex) {
     const tables = getChatTables();
@@ -382,11 +381,11 @@ function exportTable(tableIndex) {
     a.click();
     
     URL.revokeObjectURL(url);
-    showToast('表格已导出', 'success');
+    showToast('Bảng đã được xuất', 'success');
 }
 
 /**
- * 导入表格
+ * Nhập bảng
  */
 function importTable(file) {
     const reader = new FileReader();
@@ -394,13 +393,13 @@ function importTable(file) {
         try {
             const tableData = JSON.parse(e.target.result);
             if (!tableData || typeof tableData !== 'object') {
-                throw new Error('无效的表格数据');
+                throw new Error('Dữ liệu bảng không hợp lệ');
             }
             
-            // 确保有必要的字段
+            // Đảm bảo có các trường cần thiết
             const newTable = {
                 id: Date.now().toString(),
-                name: tableData.name || '导入的表格',
+                name: tableData.name || 'Bảng đã nhập',
                 rows: tableData.rows || 2,
                 cols: tableData.cols || 2,
                 data: tableData.data || {},
@@ -412,31 +411,31 @@ function importTable(file) {
             setChatTables(tables);
             
             renderCustomTablesList();
-            showToast('表格已导入', 'success');
+            showToast('Bảng đã được nhập', 'success');
         } catch (err) {
-            showToast('导入失败: ' + err.message, 'error');
+            showToast('Nhập thất bại: ' + err.message, 'error');
         }
     };
     reader.readAsText(file);
 }
 
 // ============================================
-// UI 渲染函数
+// Hàm render UI
 // ============================================
 
 /**
- * 更新状态页面显示
+ * Cập nhật hiển thị trang trạng thái
  */
 function updateStatusDisplay() {
     const state = horaeManager.getLatestState();
     
-    // 更新时间显示（标准日历显示周几）
+    // Cập nhật hiển thị thời gian (Lịch chuẩn hiển thị thứ mấy)
     const dateEl = document.getElementById('horae-current-date');
     const timeEl = document.getElementById('horae-current-time');
     if (dateEl) {
         const dateStr = state.timestamp?.story_date || '--/--';
         const parsed = parseStoryDate(dateStr);
-        // 标准日历添加周几
+        // Lịch chuẩn thêm thứ mấy
         if (parsed && parsed.type === 'standard') {
             dateEl.textContent = formatStoryDate(parsed, true);
         } else {
@@ -445,25 +444,25 @@ function updateStatusDisplay() {
     }
     if (timeEl) timeEl.textContent = state.timestamp?.story_time || '--:--';
     
-    // 更新地点显示
+    // Cập nhật hiển thị địa điểm
     const locationEl = document.getElementById('horae-current-location');
-    if (locationEl) locationEl.textContent = state.scene?.location || '未设置';
+    if (locationEl) locationEl.textContent = state.scene?.location || 'Chưa thiết lập';
     
-    // 更新氛围
+    // Cập nhật bầu không khí
     const atmosphereEl = document.getElementById('horae-current-atmosphere');
     if (atmosphereEl) atmosphereEl.textContent = state.scene?.atmosphere || '';
     
-    // 更新服装列表（仅显示在场角色的服装）
+    // Cập nhật danh sách trang phục (Chỉ hiển thị trang phục của nhân vật có mặt)
     const costumesEl = document.getElementById('horae-costumes-list');
     if (costumesEl) {
         const presentChars = state.scene?.characters_present || [];
         const allCostumes = Object.entries(state.costumes || {});
-        // 筛选：仅保留 characters_present 中的角色
+        // Lọc: Chỉ giữ lại những nhân vật có trong characters_present
         const entries = presentChars.length > 0
             ? allCostumes.filter(([char]) => presentChars.some(p => p === char || char.includes(p) || p.includes(char)))
             : allCostumes;
         if (entries.length === 0) {
-            costumesEl.innerHTML = '<div class="horae-empty-hint">暂无在场角色服装记录</div>';
+            costumesEl.innerHTML = '<div class="horae-empty-hint">Không có ghi chép trang phục nhân vật có mặt</div>';
         } else {
             costumesEl.innerHTML = entries.map(([char, costume]) => `
                 <div class="horae-costume-item">
@@ -474,12 +473,12 @@ function updateStatusDisplay() {
         }
     }
     
-    // 更新物品快速列表
+    // Cập nhật danh sách nhanh vật phẩm
     const itemsEl = document.getElementById('horae-items-quick');
     if (itemsEl) {
         const entries = Object.entries(state.items || {});
         if (entries.length === 0) {
-            itemsEl.innerHTML = '<div class="horae-empty-hint">暂无物品追踪</div>';
+            itemsEl.innerHTML = '<div class="horae-empty-hint">Không có vật phẩm nào được theo dõi</div>';
         } else {
             itemsEl.innerHTML = entries.map(([name, info]) => {
                 const icon = info.icon || '📦';
@@ -492,7 +491,7 @@ function updateStatusDisplay() {
 }
 
 /**
- * 更新时间线显示
+ * Cập nhật hiển thị dòng thời gian
  */
 function updateTimelineDisplay() {
     const filterLevel = document.getElementById('horae-timeline-filter')?.value || 'all';
@@ -502,7 +501,7 @@ function updateTimelineDisplay() {
     
     if (!listEl) return;
     
-    // 关键字筛选
+    // Lọc theo từ khóa
     if (searchKeyword) {
         events = events.filter(e => {
             const summary = (e.event?.summary || '').toLowerCase();
@@ -513,12 +512,12 @@ function updateTimelineDisplay() {
     }
     
     if (events.length === 0) {
-        const filterText = filterLevel === 'all' ? '' : `「${filterLevel}」级别的`;
-        const searchText = searchKeyword ? `含「${searchKeyword}」的` : '';
+        const filterText = filterLevel === 'all' ? '' : `cấp 「${filterLevel}」`;
+        const searchText = searchKeyword ? `chứa 「${searchKeyword}」` : '';
         listEl.innerHTML = `
             <div class="horae-empty-state">
                 <i class="fa-regular fa-clock"></i>
-                <span>暂无${searchText}${filterText}事件记录</span>
+                <span>Không có ghi chép sự kiện ${searchText}${filterText}</span>
             </div>
         `;
         return;
@@ -537,7 +536,7 @@ function updateTimelineDisplay() {
                           e.event?.level === '重要' ? 'important' : '';
         const levelBadge = e.event?.level ? `<span class="horae-level-badge ${levelClass}">${e.event.level}</span>` : '';
         
-        // 标准日历显示周几
+        // Lịch chuẩn hiển thị thứ mấy
         const dateStr = e.timestamp?.story_date || '?';
         const parsed = parseStoryDate(dateStr);
         const displayDate = (parsed && parsed.type === 'standard') ? formatStoryDate(parsed, true) : dateStr;
@@ -549,10 +548,10 @@ function updateTimelineDisplay() {
                     <div>${e.timestamp?.story_time || ''}</div>
                 </div>
                 <div class="horae-timeline-content">
-                    <div class="horae-timeline-summary">${levelBadge}${e.event?.summary || '未记录'}</div>
-                    <div class="horae-timeline-meta">${relTime} · 消息 #${e.messageIndex}</div>
+                    <div class="horae-timeline-summary">${levelBadge}${e.event?.summary || 'Chưa ghi chép'}</div>
+                    <div class="horae-timeline-meta">${relTime} · Tin nhắn #${e.messageIndex}</div>
                 </div>
-                <button class="horae-item-edit-btn" data-edit-type="event" data-message-id="${e.messageIndex}" data-event-index="${e.eventIndex || 0}" title="编辑">
+                <button class="horae-item-edit-btn" data-edit-type="event" data-message-id="${e.messageIndex}" data-event-index="${e.eventIndex || 0}" title="Chỉnh sửa">
                     <i class="fa-solid fa-pen"></i>
                 </button>
             </div>
@@ -571,7 +570,7 @@ function updateTimelineDisplay() {
 }
 
 /**
- * 更新待办事项显示
+ * Cập nhật hiển thị việc cần làm
  */
 function updateAgendaDisplay() {
     const listEl = document.getElementById('horae-agenda-list');
@@ -580,19 +579,19 @@ function updateAgendaDisplay() {
     const agenda = getAllAgenda();
     
     if (agenda.length === 0) {
-        listEl.innerHTML = '<div class="horae-empty-hint">暂无待办事项</div>';
-        // 退出多选模式（如果所有待办被删完了）
+        listEl.innerHTML = '<div class="horae-empty-hint">Không có việc cần làm</div>';
+        // Thoát chế độ đa chọn (nếu tất cả việc cần làm đã bị xóa)
         if (agendaMultiSelectMode) exitAgendaMultiSelect();
         return;
     }
     
     listEl.innerHTML = agenda.map((item, index) => {
         const sourceIcon = item.source === 'ai'
-            ? '<i class="fa-solid fa-robot horae-agenda-source-ai" title="AI记录"></i>'
-            : '<i class="fa-solid fa-user horae-agenda-source-user" title="用户添加"></i>';
+            ? '<i class="fa-solid fa-robot horae-agenda-source-ai" title="AI ghi chép"></i>'
+            : '<i class="fa-solid fa-user horae-agenda-source-user" title="Người dùng thêm"></i>';
         const dateDisplay = item.date ? `<span class="horae-agenda-date"><i class="fa-regular fa-calendar"></i> ${escapeHtml(item.date)}</span>` : '';
         
-        // 多选模式：显示 checkbox
+        // Chế độ đa chọn: hiển thị checkbox
         const checkboxHtml = agendaMultiSelectMode
             ? `<label class="horae-agenda-select-check"><input type="checkbox" ${selectedAgendaIndices.has(index) ? 'checked' : ''} data-agenda-select="${index}"></label>`
             : '';
@@ -615,20 +614,20 @@ function updateAgendaDisplay() {
         const idx = parseInt(el.dataset.agendaIdx);
         
         if (agendaMultiSelectMode) {
-            // 多选模式：点击切换选中
+            // Chế độ đa chọn: click để chuyển đổi chọn
             el.addEventListener('click', (e) => {
                 e.stopPropagation();
                 toggleAgendaSelection(idx);
             });
         } else {
-            // 普通模式：点击编辑，长按进入多选
+            // Chế độ thường: click để chỉnh sửa, nhấn giữ để vào đa chọn
             el.addEventListener('click', (e) => {
                 e.stopPropagation();
                 const item = currentAgenda[idx];
                 if (item) openAgendaEditModal(item);
             });
             
-            // 长按进入多选模式（仅绑定在 agenda item 上）
+            // Nhấn giữ để vào chế độ đa chọn (chỉ bind trên agenda item)
             el.addEventListener('mousedown', (e) => startAgendaLongPress(e, idx));
             el.addEventListener('touchstart', (e) => startAgendaLongPress(e, idx), { passive: true });
             el.addEventListener('mouseup', cancelAgendaLongPress);
@@ -640,7 +639,7 @@ function updateAgendaDisplay() {
     });
 }
 
-// ---- 待办多选模式 ----
+// ---- Chế độ đa chọn Việc cần làm ----
 
 function startAgendaLongPress(e, agendaIdx) {
     if (agendaMultiSelectMode) return;
@@ -666,13 +665,13 @@ function enterAgendaMultiSelect(initialIdx) {
     const bar = document.getElementById('horae-agenda-multiselect-bar');
     if (bar) bar.style.display = 'flex';
     
-    // 隐藏添加按钮
+    // Ẩn nút thêm
     const addBtn = document.getElementById('horae-btn-add-agenda');
     if (addBtn) addBtn.style.display = 'none';
     
     updateAgendaDisplay();
     updateAgendaSelectedCount();
-    showToast('已进入多选模式，点击选择待办事项', 'info');
+    showToast('Đã vào chế độ đa chọn, nhấn để chọn việc cần làm', 'info');
 }
 
 function exitAgendaMultiSelect() {
@@ -682,7 +681,7 @@ function exitAgendaMultiSelect() {
     const bar = document.getElementById('horae-agenda-multiselect-bar');
     if (bar) bar.style.display = 'none';
     
-    // 恢复添加按钮
+    // Khôi phục nút thêm
     const addBtn = document.getElementById('horae-btn-add-agenda');
     if (addBtn) addBtn.style.display = '';
     
@@ -696,7 +695,7 @@ function toggleAgendaSelection(idx) {
         selectedAgendaIndices.add(idx);
     }
     
-    // 更新该条目的UI
+    // Cập nhật UI của mục đó
     const item = document.querySelector(`#horae-agenda-list .horae-agenda-item[data-agenda-idx="${idx}"]`);
     if (item) {
         const cb = item.querySelector('input[type="checkbox"]');
@@ -724,14 +723,14 @@ function updateAgendaSelectedCount() {
 
 async function deleteSelectedAgenda() {
     if (selectedAgendaIndices.size === 0) {
-        showToast('没有选中任何待办事项', 'warning');
+        showToast('Chưa chọn việc cần làm nào', 'warning');
         return;
     }
     
-    const confirmed = confirm(`确定要删除选中的 ${selectedAgendaIndices.size} 条待办事项吗？\n\n此操作不可撤销。`);
+    const confirmed = confirm(`Bạn có chắc chắn muốn xóa ${selectedAgendaIndices.size} việc cần làm đã chọn không?\n\nThao tác này không thể hoàn tác.`);
     if (!confirmed) return;
     
-    // 获取当前完整的 agenda 列表，按索引倒序删除
+    // Lấy danh sách agenda đầy đủ hiện tại, xóa theo thứ tự ngược lại của index
     const agenda = getAllAgenda();
     const sortedIndices = Array.from(selectedAgendaIndices).sort((a, b) => b - a);
     
@@ -743,26 +742,26 @@ async function deleteSelectedAgenda() {
     }
     
     await getContext().saveChat();
-    showToast(`已删除 ${selectedAgendaIndices.size} 条待办事项`, 'success');
+    showToast(`Đã xóa ${selectedAgendaIndices.size} việc cần làm`, 'success');
     
     exitAgendaMultiSelect();
 }
 
 /**
- * 打开待办事项添加/编辑弹窗
- * @param {Object|null} agendaItem - 编辑时传入完整 agenda 对象，新增时传 null
+ * Mở popup thêm/sửa việc cần làm
+ * @param {Object|null} agendaItem - Truyền đối tượng agenda đầy đủ khi sửa, truyền null khi thêm mới
  */
 function openAgendaEditModal(agendaItem = null) {
     const isEdit = agendaItem !== null;
     const currentText = isEdit ? (agendaItem.text || '') : '';
     const currentDate = isEdit ? (agendaItem.date || '') : '';
-    const title = isEdit ? '编辑待办' : '添加待办';
+    const title = isEdit ? 'Chỉnh sửa việc cần làm' : 'Thêm việc cần làm';
     
     closeEditModal();
     
     const deleteBtn = isEdit ? `
                     <button id="agenda-modal-delete" class="menu_button danger">
-                        <i class="fa-solid fa-trash"></i> 删除
+                        <i class="fa-solid fa-trash"></i> Xóa
                     </button>` : '';
     
     const modalHtml = `
@@ -773,20 +772,20 @@ function openAgendaEditModal(agendaItem = null) {
                 </div>
                 <div class="horae-modal-body horae-edit-modal-body">
                     <div class="horae-edit-field">
-                        <label>订立日期 (选填)</label>
-                        <input type="text" id="agenda-edit-date" value="${escapeHtml(currentDate)}" placeholder="如 2026/02/10">
+                        <label>Ngày lập (Không bắt buộc)</label>
+                        <input type="text" id="agenda-edit-date" value="${escapeHtml(currentDate)}" placeholder="Ví dụ 2026/02/10">
                     </div>
                     <div class="horae-edit-field">
-                        <label>内容</label>
-                        <textarea id="agenda-edit-text" rows="3" placeholder="输入待办事项，相对时间请标注绝对时间，例如：艾伦邀请艾莉絲於情人節晚上(2026/02/14 18:00)约会">${escapeHtml(currentText)}</textarea>
+                        <label>Nội dung</label>
+                        <textarea id="agenda-edit-text" rows="3" placeholder="Nhập việc cần làm, thời gian tương đối vui lòng ghi chú ngày tuyệt đối, ví dụ: Alan mời Alice hẹn hò vào tối Valentine (2026/02/14 18:00)">${escapeHtml(currentText)}</textarea>
                     </div>
                 </div>
                 <div class="horae-modal-footer">
                     <button id="agenda-modal-save" class="menu_button primary">
-                        <i class="fa-solid fa-check"></i> 保存
+                        <i class="fa-solid fa-check"></i> Lưu
                     </button>
                     <button id="agenda-modal-cancel" class="menu_button">
-                        <i class="fa-solid fa-xmark"></i> 取消
+                        <i class="fa-solid fa-xmark"></i> Hủy
                     </button>
                     ${deleteBtn}
                 </div>
@@ -812,12 +811,12 @@ function openAgendaEditModal(agendaItem = null) {
         const text = document.getElementById('agenda-edit-text').value.trim();
         const date = document.getElementById('agenda-edit-date').value.trim();
         if (!text) {
-            showToast('内容不能为空', 'warning');
+            showToast('Nội dung không được để trống', 'warning');
             return;
         }
         
         if (isEdit) {
-            // 编辑现有项
+            // Sửa mục hiện có
             const context = getContext();
             if (agendaItem._store === 'user') {
                 const agenda = getUserAgenda();
@@ -839,7 +838,7 @@ function openAgendaEditModal(agendaItem = null) {
                 }
             }
         } else {
-            // 新增
+            // Thêm mới
             const agenda = getUserAgenda();
             agenda.push({ text, date, source: 'user', done: false, createdAt: Date.now() });
             setUserAgenda(agenda);
@@ -847,7 +846,7 @@ function openAgendaEditModal(agendaItem = null) {
         
         closeEditModal();
         updateAgendaDisplay();
-        showToast(isEdit ? '待办已更新' : '待办已添加', 'success');
+        showToast(isEdit ? 'Đã cập nhật việc cần làm' : 'Đã thêm việc cần làm', 'success');
     });
     
     document.getElementById('agenda-modal-cancel').addEventListener('click', (e) => {
@@ -856,40 +855,40 @@ function openAgendaEditModal(agendaItem = null) {
         closeEditModal();
     });
     
-    // 删除按钮（仅编辑模式）
+    // Nút xóa (chỉ chế độ sửa)
     const deleteEl = document.getElementById('agenda-modal-delete');
     if (deleteEl && isEdit) {
         deleteEl.addEventListener('click', (e) => {
             e.stopPropagation();
             e.stopImmediatePropagation();
             
-            if (!confirm('确定要删除这条待办事项吗？此操作无法撤销。')) return;
+            if (!confirm('Bạn có chắc chắn muốn xóa việc cần làm này không? Thao tác này không thể hoàn tác.')) return;
             
             deleteAgendaItem(agendaItem);
             closeEditModal();
             updateAgendaDisplay();
-            showToast('待办已删除', 'info');
+            showToast('Đã xóa việc cần làm', 'info');
         });
     }
 }
 
 /**
- * 更新角色页面显示
+ * Cập nhật hiển thị trang nhân vật
  */
 function updateCharactersDisplay() {
     const state = horaeManager.getLatestState();
     const presentChars = state.scene?.characters_present || [];
     const favoriteNpcs = settings.favoriteNpcs || [];
     
-    // 获取角色卡主角色名（用于置顶和特殊样式）
+    // Lấy tên nhân vật chính của thẻ nhân vật (để ghim và tạo kiểu đặc biệt)
     const context = getContext();
     const mainCharName = context?.name2 || '';
     
-    // 在场角色
+    // Nhân vật có mặt
     const presentEl = document.getElementById('horae-present-characters');
     if (presentEl) {
         if (presentChars.length === 0) {
-            presentEl.innerHTML = '<div class="horae-empty-hint">暂无记录</div>';
+            presentEl.innerHTML = '<div class="horae-empty-hint">Không có ghi chép</div>';
         } else {
             presentEl.innerHTML = presentChars.map(char => {
                 const isMainChar = mainCharName && char.includes(mainCharName);
@@ -903,15 +902,15 @@ function updateCharactersDisplay() {
         }
     }
     
-    // 好感度 - 分层显示：重要角色 > 在场角色 > 其他
+    // Độ hảo cảm - Hiển thị phân tầng: Nhân vật quan trọng > Nhân vật có mặt > Khác
     const affectionEl = document.getElementById('horae-affection-list');
     const pinnedNpcsAff = settings.pinnedNpcs || [];
     if (affectionEl) {
         const entries = Object.entries(state.affection || {});
         if (entries.length === 0) {
-            affectionEl.innerHTML = '<div class="horae-empty-hint">暂无好感度记录</div>';
+            affectionEl.innerHTML = '<div class="horae-empty-hint">Không có ghi chép độ hảo cảm</div>';
         } else {
-            // 判断是否为重要角色
+            // Kiểm tra xem có phải là nhân vật quan trọng không
             const isMainCharAff = (key) => {
                 if (pinnedNpcsAff.includes(key)) return true;
                 if (mainCharName && key.includes(mainCharName)) return true;
@@ -936,7 +935,7 @@ function updateCharactersDisplay() {
                         <span class="horae-affection-name">${key}</span>
                         <span class="horae-affection-value ${valueClass}">${numValue > 0 ? '+' : ''}${numValue}</span>
                         <span class="horae-affection-level">${level}</span>
-                        <button class="horae-item-edit-btn horae-affection-edit-btn" data-edit-type="affection" data-char="${key}" title="编辑好感度">
+                        <button class="horae-item-edit-btn horae-affection-edit-btn" data-edit-type="affection" data-char="${key}" title="Chỉnh sửa độ hảo cảm">
                             <i class="fa-solid fa-pen"></i>
                         </button>
                     </div>
@@ -944,7 +943,7 @@ function updateCharactersDisplay() {
             }).join('');
             
             let html = '';
-            // 角色卡角色置顶
+            // Ghim nhân vật của thẻ nhân vật
             if (mainCharAffection.length > 0) {
                 html += renderAffection(mainCharAffection, true);
             }
@@ -964,15 +963,15 @@ function updateCharactersDisplay() {
         }
     }
     
-    // NPC列表 - 分层显示：重要角色 > 星标角色 > 普通角色
+    // Danh sách NPC - Hiển thị phân tầng: Nhân vật quan trọng > Nhân vật đánh dấu sao > Nhân vật thường
     const npcEl = document.getElementById('horae-npc-list');
     const pinnedNpcs = settings.pinnedNpcs || [];
     if (npcEl) {
         const entries = Object.entries(state.npcs || {});
         if (entries.length === 0) {
-            npcEl.innerHTML = '<div class="horae-empty-hint">暂无角色记录</div>';
+            npcEl.innerHTML = '<div class="horae-empty-hint">Không có ghi chép nhân vật</div>';
         } else {
-            // 判断是否为重要角色（角色卡主角 或 用户手动标记）
+            // Kiểm tra xem có phải là nhân vật quan trọng không (Nhân vật chính trong thẻ hoặc người dùng đánh dấu thủ công)
             const isMainChar = (name) => {
                 if (pinnedNpcs.includes(name)) return true;
                 if (mainCharName && name.includes(mainCharName)) return true;
@@ -995,16 +994,16 @@ function updateCharactersDisplay() {
                 } else if (info.description) {
                     descHtml = `<span class="horae-npc-legacy">${info.description}</span>`;
                 } else {
-                    descHtml = '<span class="horae-npc-legacy">无描述</span>';
+                    descHtml = '<span class="horae-npc-legacy">Không có mô tả</span>';
                 }
                 
-                // 扩展信息行（年龄/种族/职业，紧凑显示）
+                // Dòng thông tin mở rộng (Tuổi/Chủng tộc/Nghề nghiệp, hiển thị gọn)
                 const extraTags = [];
                 if (info.race) extraTags.push(info.race);
                 if (info.age) {
                     const ageResult = horaeManager.calcCurrentAge(info, state.timestamp?.story_date);
                     if (ageResult.changed) {
-                        extraTags.push(`<span class="horae-age-calc" title="原始:${ageResult.original} (已推算时间推移)">${ageResult.display}岁</span>`);
+                        extraTags.push(`<span class="horae-age-calc" title="Gốc:${ageResult.original} (Đã tính toán thời gian trôi qua)">${ageResult.display} tuổi</span>`);
                     } else {
                         extraTags.push(info.age);
                     }
@@ -1021,7 +1020,7 @@ function updateCharactersDisplay() {
                 const mainClass = isMainChar ? 'main-character' : '';
                 const starIcon = isFavorite ? 'fa-solid fa-star' : 'fa-regular fa-star';
                 
-                // 性别图标映射
+                // Ánh xạ biểu tượng giới tính
                 let genderIcon, genderClass;
                 if (isMainChar) {
                     genderIcon = 'fa-solid fa-crown';
@@ -1045,10 +1044,10 @@ function updateCharactersDisplay() {
                         <div class="horae-npc-header">
                             <div class="horae-npc-name"><i class="${genderIcon} ${genderClass}"></i> ${name}</div>
                             <div class="horae-npc-actions">
-                                <button class="horae-item-edit-btn" data-edit-type="npc" data-edit-name="${name}" title="编辑" style="opacity:1;position:static;">
+                                <button class="horae-item-edit-btn" data-edit-type="npc" data-edit-name="${name}" title="Chỉnh sửa" style="opacity:1;position:static;">
                                     <i class="fa-solid fa-pen"></i>
                                 </button>
-                                <button class="horae-npc-star" title="${isFavorite ? '取消星标' : '添加星标'}">
+                                <button class="horae-npc-star" title="${isFavorite ? 'Bỏ đánh dấu sao' : 'Thêm đánh dấu sao'}">
                                     <i class="${starIcon}"></i>
                                 </button>
                             </div>
@@ -1058,43 +1057,43 @@ function updateCharactersDisplay() {
                 `;
             };
             
-            // 性别过滤栏
+            // Thanh lọc giới tính
             let html = `
                 <div class="horae-gender-filter">
-                    <button class="horae-gender-btn active" data-filter="all" title="全部">全部</button>
-                    <button class="horae-gender-btn" data-filter="male" title="男性"><i class="fa-solid fa-person"></i></button>
-                    <button class="horae-gender-btn" data-filter="female" title="女性"><i class="fa-solid fa-person-dress"></i></button>
-                    <button class="horae-gender-btn" data-filter="other" title="其他/未知"><i class="fa-solid fa-user"></i></button>
+                    <button class="horae-gender-btn active" data-filter="all" title="Tất cả">Tất cả</button>
+                    <button class="horae-gender-btn" data-filter="male" title="Nam"><i class="fa-solid fa-person"></i></button>
+                    <button class="horae-gender-btn" data-filter="female" title="Nữ"><i class="fa-solid fa-person-dress"></i></button>
+                    <button class="horae-gender-btn" data-filter="other" title="Khác/Không rõ"><i class="fa-solid fa-user"></i></button>
                 </div>
             `;
             
-            // 角色卡角色区域（置顶）
+            // Khu vực nhân vật của thẻ nhân vật (Ghim)
             if (mainCharEntries.length > 0) {
                 html += '<div class="horae-npc-section main-character-section">';
-                html += '<div class="horae-npc-section-title"><i class="fa-solid fa-crown"></i> 主要角色</div>';
+                html += '<div class="horae-npc-section-title"><i class="fa-solid fa-crown"></i> Nhân vật chính</div>';
                 html += mainCharEntries.map(([name, info]) => renderNpc(name, info, false, true)).join('');
                 html += '</div>';
             }
             
-            // 星标NPC区域
+            // Khu vực NPC đánh dấu sao
             if (favoriteEntries.length > 0) {
                 if (mainCharEntries.length > 0) {
                     html += '<div class="horae-npc-section-divider"></div>';
                 }
                 html += '<div class="horae-npc-section favorite-section">';
-                html += '<div class="horae-npc-section-title"><i class="fa-solid fa-star"></i> 星标NPC</div>';
+                html += '<div class="horae-npc-section-title"><i class="fa-solid fa-star"></i> NPC được đánh dấu sao</div>';
                 html += favoriteEntries.map(([name, info]) => renderNpc(name, info, true)).join('');
                 html += '</div>';
             }
             
-            // 普通NPC区域
+            // Khu vực NPC thường
             if (normalEntries.length > 0) {
                 if (mainCharEntries.length > 0 || favoriteEntries.length > 0) {
                     html += '<div class="horae-npc-section-divider"></div>';
                 }
                 html += '<div class="horae-npc-section">';
                 if (mainCharEntries.length > 0 || favoriteEntries.length > 0) {
-                    html += '<div class="horae-npc-section-title">其他NPC</div>';
+                    html += '<div class="horae-npc-section-title">NPC khác</div>';
                 }
                 html += normalEntries.map(([name, info]) => renderNpc(name, info, false)).join('');
                 html += '</div>';
@@ -1137,7 +1136,7 @@ function updateCharactersDisplay() {
 }
 
 /**
- * 切换NPC星标状态
+ * Chuyển đổi trạng thái đánh dấu sao NPC
  */
 function toggleNpcFavorite(npcName) {
     if (!settings.favoriteNpcs) {
@@ -1146,13 +1145,13 @@ function toggleNpcFavorite(npcName) {
     
     const index = settings.favoriteNpcs.indexOf(npcName);
     if (index > -1) {
-        // 取消星标
+        // Bỏ đánh dấu sao
         settings.favoriteNpcs.splice(index, 1);
-        showToast(`已取消 ${npcName} 的星标`, 'info');
+        showToast(`Đã bỏ đánh dấu sao ${npcName}`, 'info');
     } else {
-        // 添加星标
+        // Thêm đánh dấu sao
         settings.favoriteNpcs.push(npcName);
-        showToast(`已将 ${npcName} 添加到星标`, 'success');
+        showToast(`Đã thêm ${npcName} vào danh sách đánh dấu sao`, 'success');
     }
     
     saveSettings();
@@ -1160,7 +1159,7 @@ function toggleNpcFavorite(npcName) {
 }
 
 /**
- * 更新物品页面显示
+ * Cập nhật hiển thị trang vật phẩm
  */
 function updateItemsDisplay() {
     const state = horaeManager.getLatestState();
@@ -1183,15 +1182,15 @@ function updateItemsDisplay() {
             if (info.holder) holders.add(info.holder);
         });
         
-        // 保留当前选项，更新选项列表
-        const holderOptions = ['<option value="all">所有人</option>'];
+        // Giữ lại tùy chọn hiện tại, cập nhật danh sách tùy chọn
+        const holderOptions = ['<option value="all">Tất cả mọi người</option>'];
         holders.forEach(holder => {
             holderOptions.push(`<option value="${holder}" ${holder === currentHolder ? 'selected' : ''}>${holder}</option>`);
         });
         holderFilterEl.innerHTML = holderOptions.join('');
     }
     
-    // 搜索物品 - 按关键字
+    // Tìm kiếm vật phẩm - Theo từ khóa
     if (searchQuery) {
         entries = entries.filter(([name, info]) => {
             const searchTarget = `${name} ${info.icon || ''} ${info.description || ''} ${info.holder || ''} ${info.location || ''}`.toLowerCase();
@@ -1199,20 +1198,20 @@ function updateItemsDisplay() {
         });
     }
     
-    // 筛选物品 - 按重要程度
+    // Lọc vật phẩm - Theo mức độ quan trọng
     if (filterValue !== 'all') {
         entries = entries.filter(([name, info]) => info.importance === filterValue);
     }
     
-    // 筛选物品 - 按持有人
+    // Lọc vật phẩm - Theo người nắm giữ
     if (holderFilter !== 'all') {
         entries = entries.filter(([name, info]) => info.holder === holderFilter);
     }
     
     if (entries.length === 0) {
-        let emptyMsg = '暂无追踪的物品';
+        let emptyMsg = 'Không có vật phẩm được theo dõi';
         if (filterValue !== 'all' || holderFilter !== 'all' || searchQuery) {
-            emptyMsg = '没有符合筛选条件的物品';
+            emptyMsg = 'Không có vật phẩm phù hợp điều kiện lọc';
         }
         listEl.innerHTML = `
             <div class="horae-empty-state">
@@ -1226,24 +1225,24 @@ function updateItemsDisplay() {
     listEl.innerHTML = entries.map(([name, info]) => {
         const icon = info.icon || '📦';
         const importance = info.importance || '';
-        // 支持两种格式：""/"!"/"!!" 和 "一般"/"重要"/"关键"
+        // Hỗ trợ hai định dạng: ""/"!"/"!!" và "一般"/"重要"/"关键" (Bình thường/Quan trọng/Then chốt)
         const isCritical = importance === '!!' || importance === '关键';
         const isImportant = importance === '!' || importance === '重要';
         const importanceClass = isCritical ? 'critical' : isImportant ? 'important' : 'normal';
-        // 显示中文标签
-        const importanceLabel = isCritical ? '关键' : isImportant ? '重要' : '';
+        // Hiển thị nhãn
+        const importanceLabel = isCritical ? 'Then chốt' : isImportant ? 'Quan trọng' : '';
         const importanceBadge = importanceLabel ? `<span class="horae-item-importance ${importanceClass}">${importanceLabel}</span>` : '';
         
-        // 修复显示格式：持有者 · 位置
+        // Sửa định dạng hiển thị: Người nắm giữ · Vị trí
         let positionStr = '';
         if (info.holder && info.location) {
             positionStr = `<span class="holder">${info.holder}</span> · ${info.location}`;
         } else if (info.holder) {
-            positionStr = `<span class="holder">${info.holder}</span> 持有`;
+            positionStr = `<span class="holder">${info.holder}</span> nắm giữ`;
         } else if (info.location) {
-            positionStr = `位于 ${info.location}`;
+            positionStr = `nằm tại ${info.location}`;
         } else {
-            positionStr = '位置未知';
+            positionStr = 'Vị trí không rõ';
         }
         
         const isSelected = selectedItems.has(name);
@@ -1265,7 +1264,7 @@ function updateItemsDisplay() {
                     <div class="horae-full-item-location">${positionStr}</div>
                     ${descHtml}
                 </div>
-                <button class="horae-item-edit-btn" data-edit-type="item" data-edit-name="${name}" title="编辑">
+                <button class="horae-item-edit-btn" data-edit-type="item" data-edit-name="${name}" title="Chỉnh sửa">
                     <i class="fa-solid fa-pen"></i>
                 </button>
             </div>
@@ -1277,11 +1276,11 @@ function updateItemsDisplay() {
 }
 
 /**
- * 绑定编辑按钮事件
+ * Ràng buộc sự kiện nút chỉnh sửa
  */
 function bindEditButtons() {
     document.querySelectorAll('.horae-item-edit-btn').forEach(btn => {
-        // 移除旧的监听器（避免重复绑定）
+        // Xóa listener cũ (tránh ràng buộc trùng lặp)
         btn.replaceWith(btn.cloneNode(true));
     });
     
@@ -1308,13 +1307,13 @@ function bindEditButtons() {
 }
 
 /**
- * 打开物品编辑弹窗
+ * Mở popup chỉnh sửa vật phẩm
  */
 function openItemEditModal(itemName) {
     const state = horaeManager.getLatestState();
     const item = state.items?.[itemName];
     if (!item) {
-        showToast('找不到该物品', 'error');
+        showToast('Không tìm thấy vật phẩm này', 'error');
         return;
     }
     
@@ -1322,44 +1321,44 @@ function openItemEditModal(itemName) {
         <div id="horae-edit-modal" class="horae-modal">
             <div class="horae-modal-content">
                 <div class="horae-modal-header">
-                    <i class="fa-solid fa-pen"></i> 编辑物品
+                    <i class="fa-solid fa-pen"></i> Chỉnh sửa vật phẩm
                 </div>
                 <div class="horae-modal-body horae-edit-modal-body">
                     <div class="horae-edit-field">
-                        <label>物品名称</label>
-                        <input type="text" id="edit-item-name" value="${itemName}" placeholder="物品名称">
+                        <label>Tên vật phẩm</label>
+                        <input type="text" id="edit-item-name" value="${itemName}" placeholder="Tên vật phẩm">
                     </div>
                     <div class="horae-edit-field">
-                        <label>图标 (emoji)</label>
+                        <label>Biểu tượng (emoji)</label>
                         <input type="text" id="edit-item-icon" value="${item.icon || ''}" maxlength="2" placeholder="📦">
                     </div>
                     <div class="horae-edit-field">
-                        <label>重要程度</label>
+                        <label>Mức độ quan trọng</label>
                         <select id="edit-item-importance">
-                            <option value="" ${!item.importance || item.importance === '一般' || item.importance === '' ? 'selected' : ''}>一般</option>
-                            <option value="!" ${item.importance === '!' || item.importance === '重要' ? 'selected' : ''}>重要 !</option>
-                            <option value="!!" ${item.importance === '!!' || item.importance === '关键' ? 'selected' : ''}>关键 !!</option>
+                            <option value="" ${!item.importance || item.importance === '一般' || item.importance === '' ? 'selected' : ''}>Bình thường</option>
+                            <option value="!" ${item.importance === '!' || item.importance === '重要' ? 'selected' : ''}>Quan trọng !</option>
+                            <option value="!!" ${item.importance === '!!' || item.importance === '关键' ? 'selected' : ''}>Then chốt !!</option>
                         </select>
                     </div>
                     <div class="horae-edit-field">
-                        <label>描述 (特殊功能/来源等)</label>
-                        <textarea id="edit-item-desc" placeholder="如：爱丽丝在约会时赠送的">${item.description || ''}</textarea>
+                        <label>Mô tả (Chức năng đặc biệt/Nguồn gốc...)</label>
+                        <textarea id="edit-item-desc" placeholder="Ví dụ: Được Alice tặng khi hẹn hò">${item.description || ''}</textarea>
                     </div>
                     <div class="horae-edit-field">
-                        <label>持有者</label>
-                        <input type="text" id="edit-item-holder" value="${item.holder || ''}" placeholder="角色名">
+                        <label>Người nắm giữ</label>
+                        <input type="text" id="edit-item-holder" value="${item.holder || ''}" placeholder="Tên nhân vật">
                     </div>
                     <div class="horae-edit-field">
-                        <label>位置</label>
-                        <input type="text" id="edit-item-location" value="${item.location || ''}" placeholder="如：背包、口袋、家里茶几上">
+                        <label>Vị trí</label>
+                        <input type="text" id="edit-item-location" value="${item.location || ''}" placeholder="Ví dụ: Ba lô, túi áo, trên bàn trà ở nhà">
                     </div>
                 </div>
                 <div class="horae-modal-footer">
                     <button id="edit-modal-save" class="menu_button primary">
-                        <i class="fa-solid fa-check"></i> 保存
+                        <i class="fa-solid fa-check"></i> Lưu
                     </button>
                     <button id="edit-modal-cancel" class="menu_button">
-                        <i class="fa-solid fa-xmark"></i> 取消
+                        <i class="fa-solid fa-xmark"></i> Hủy
                     </button>
                 </div>
             </div>
@@ -1374,7 +1373,7 @@ function openItemEditModal(itemName) {
         e.stopImmediatePropagation();
         const newName = document.getElementById('edit-item-name').value.trim();
         if (!newName) {
-            showToast('物品名称不能为空', 'error');
+            showToast('Tên vật phẩm không được để trống', 'error');
             return;
         }
         
@@ -1386,7 +1385,7 @@ function openItemEditModal(itemName) {
             location: document.getElementById('edit-item-location').value
         };
         
-        // 更新所有消息中的该物品
+        // Cập nhật vật phẩm này trong tất cả tin nhắn
         const chat = horaeManager.getChat();
         const nameChanged = newName !== itemName;
         
@@ -1394,11 +1393,11 @@ function openItemEditModal(itemName) {
             const meta = chat[i].horae_meta;
             if (meta?.items?.[itemName]) {
                 if (nameChanged) {
-                    // 名称改变：删除旧名，创建新名
+                    // Tên thay đổi: Xóa tên cũ, tạo tên mới
                     meta.items[newName] = { ...meta.items[itemName], ...newData };
                     delete meta.items[itemName];
                 } else {
-                    // 名称未变：直接更新
+                    // Tên không đổi: Cập nhật trực tiếp
                     Object.assign(meta.items[itemName], newData);
                 }
             }
@@ -1408,7 +1407,7 @@ function openItemEditModal(itemName) {
         closeEditModal();
         updateItemsDisplay();
         updateStatusDisplay();
-        showToast(nameChanged ? '物品已重命名并更新' : '物品已更新', 'success');
+        showToast(nameChanged ? 'Vật phẩm đã được đổi tên và cập nhật' : 'Vật phẩm đã được cập nhật', 'success');
     });
     
     document.getElementById('edit-modal-cancel').addEventListener('click', (e) => {
@@ -1419,7 +1418,7 @@ function openItemEditModal(itemName) {
 }
 
 /**
- * 打开好感度编辑弹窗
+ * Mở popup chỉnh sửa độ hảo cảm
  */
 function openAffectionEditModal(charName) {
     const state = horaeManager.getLatestState();
@@ -1431,24 +1430,24 @@ function openAffectionEditModal(charName) {
         <div id="horae-edit-modal" class="horae-modal">
             <div class="horae-modal-content">
                 <div class="horae-modal-header">
-                    <i class="fa-solid fa-heart"></i> 编辑好感度: ${charName}
+                    <i class="fa-solid fa-heart"></i> Chỉnh sửa độ hảo cảm: ${charName}
                 </div>
                 <div class="horae-modal-body horae-edit-modal-body">
                     <div class="horae-edit-field">
-                        <label>当前好感度</label>
+                        <label>Độ hảo cảm hiện tại</label>
                         <input type="number" id="edit-affection-value" value="${numValue}" placeholder="0-100">
                     </div>
                     <div class="horae-edit-field">
-                        <label>好感等级</label>
+                        <label>Cấp độ hảo cảm</label>
                         <span class="horae-affection-level-preview">${level}</span>
                     </div>
                 </div>
                 <div class="horae-modal-footer">
                     <button id="edit-modal-save" class="menu_button primary">
-                        <i class="fa-solid fa-check"></i> 保存
+                        <i class="fa-solid fa-check"></i> Lưu
                     </button>
                     <button id="edit-modal-cancel" class="menu_button">
-                        <i class="fa-solid fa-xmark"></i> 取消
+                        <i class="fa-solid fa-xmark"></i> Hủy
                     </button>
                 </div>
             </div>
@@ -1458,7 +1457,7 @@ function openAffectionEditModal(charName) {
     document.body.insertAdjacentHTML('beforeend', modalHtml);
     preventModalBubble();
     
-    // 实时更新好感等级预览
+    // Cập nhật xem trước cấp độ hảo cảm theo thời gian thực
     document.getElementById('edit-affection-value').addEventListener('input', (e) => {
         const val = parseInt(e.target.value) || 0;
         const newLevel = horaeManager.getAffectionLevel(val);
@@ -1470,11 +1469,11 @@ function openAffectionEditModal(charName) {
         e.stopImmediatePropagation();
         const newValue = parseInt(document.getElementById('edit-affection-value').value) || 0;
         
-        // 更新所有消息中的好感度（设为绝对值）
+        // Cập nhật độ hảo cảm trong tất cả tin nhắn (đặt làm giá trị tuyệt đối)
         const chat = horaeManager.getChat();
         let lastMessageWithAffection = -1;
         
-        // 找到最后一条有该角色好感度的消息
+        // Tìm tin nhắn cuối cùng có độ hảo cảm của nhân vật này
         for (let i = chat.length - 1; i >= 0; i--) {
             const meta = chat[i].horae_meta;
             if (meta?.affection?.[charName] !== undefined) {
@@ -1484,13 +1483,13 @@ function openAffectionEditModal(charName) {
         }
         
         if (lastMessageWithAffection >= 0) {
-            // 更新最后一条消息的好感度为绝对值
+            // Cập nhật độ hảo cảm của tin nhắn cuối cùng thành giá trị tuyệt đối
             chat[lastMessageWithAffection].horae_meta.affection[charName] = { 
                 type: 'absolute', 
                 value: newValue 
             };
         } else {
-            // 如果没有找到，在最后一条消息添加
+            // Nếu không tìm thấy, thêm vào tin nhắn cuối cùng
             const lastMeta = chat[chat.length - 1]?.horae_meta;
             if (lastMeta) {
                 if (!lastMeta.affection) lastMeta.affection = {};
@@ -1501,7 +1500,7 @@ function openAffectionEditModal(charName) {
         getContext().saveChat();
         closeEditModal();
         updateCharactersDisplay();
-        showToast('好感度已更新', 'success');
+        showToast('Độ hảo cảm đã được cập nhật', 'success');
     });
     
     document.getElementById('edit-modal-cancel').addEventListener('click', (e) => {
@@ -1512,88 +1511,88 @@ function openAffectionEditModal(charName) {
 }
 
 /**
- * 打开NPC编辑弹窗
+ * Mở popup chỉnh sửa NPC
  */
 function openNpcEditModal(npcName) {
     const state = horaeManager.getLatestState();
     const npc = state.npcs?.[npcName];
     if (!npc) {
-        showToast('找不到该角色', 'error');
+        showToast('Không tìm thấy nhân vật này', 'error');
         return;
     }
     
     const isPinned = (settings.pinnedNpcs || []).includes(npcName);
     
-    // 性别选项
+    // Tùy chọn giới tính
     const genderVal = npc.gender || '';
     const genderOptions = [
-        { val: '', label: '未知' },
-        { val: '男', label: '男' },
-        { val: '女', label: '女' },
-        { val: '其他', label: '其他' }
+        { val: '', label: 'Không rõ' },
+        { val: '男', label: 'Nam' },
+        { val: '女', label: 'Nữ' },
+        { val: '其他', label: 'Khác' }
     ].map(o => `<option value="${o.val}" ${genderVal === o.val ? 'selected' : ''}>${o.label}</option>`).join('');
     
     const modalHtml = `
         <div id="horae-edit-modal" class="horae-modal">
             <div class="horae-modal-content">
                 <div class="horae-modal-header">
-                    <i class="fa-solid fa-pen"></i> 编辑角色: ${npcName}
+                    <i class="fa-solid fa-pen"></i> Chỉnh sửa nhân vật: ${npcName}
                 </div>
                 <div class="horae-modal-body horae-edit-modal-body">
                     <div class="horae-edit-field">
                         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
                             <input type="checkbox" id="edit-npc-pinned" ${isPinned ? 'checked' : ''}>
                             <i class="fa-solid fa-crown" style="color:${isPinned ? '#b388ff' : '#666'}"></i>
-                            标记为重要角色（置顶+特殊边框）
+                            Đánh dấu là nhân vật quan trọng (Ghim + Viền đặc biệt)
                         </label>
                     </div>
                     <div class="horae-edit-field-row">
                         <div class="horae-edit-field horae-edit-field-compact">
-                            <label>性别</label>
+                            <label>Giới tính</label>
                             <select id="edit-npc-gender">${genderOptions}</select>
                         </div>
                         <div class="horae-edit-field horae-edit-field-compact">
-                            <label>年龄${(() => {
+                            <label>Tuổi${(() => {
                                 const ar = horaeManager.calcCurrentAge(npc, state.timestamp?.story_date);
-                                return ar.changed ? ` <span style="font-weight:normal;color:var(--horae-accent)">(当前推算:${ar.display})</span>` : '';
+                                return ar.changed ? ` <span style="font-weight:normal;color:var(--horae-accent)">(Hiện tại:${ar.display})</span>` : '';
                             })()}</label>
-                            <input type="text" id="edit-npc-age" value="${npc.age || ''}" placeholder="如：25、约35">
+                            <input type="text" id="edit-npc-age" value="${npc.age || ''}" placeholder="Ví dụ: 25, khoảng 35">
                         </div>
                         <div class="horae-edit-field horae-edit-field-compact">
-                            <label>种族</label>
-                            <input type="text" id="edit-npc-race" value="${npc.race || ''}" placeholder="如：人类、精灵">
+                            <label>Chủng tộc</label>
+                            <input type="text" id="edit-npc-race" value="${npc.race || ''}" placeholder="Ví dụ: Nhân loại, Elf">
                         </div>
                         <div class="horae-edit-field horae-edit-field-compact">
-                            <label>职业</label>
-                            <input type="text" id="edit-npc-job" value="${npc.job || ''}" placeholder="如：佣兵、学生">
+                            <label>Nghề nghiệp</label>
+                            <input type="text" id="edit-npc-job" value="${npc.job || ''}" placeholder="Ví dụ: Lính đánh thuê, Học sinh">
                         </div>
                     </div>
                     <div class="horae-edit-field">
-                        <label>外貌特征</label>
-                        <textarea id="edit-npc-appearance" placeholder="如：金发碧眼的年轻女性">${npc.appearance || ''}</textarea>
+                        <label>Đặc điểm ngoại hình</label>
+                        <textarea id="edit-npc-appearance" placeholder="Ví dụ: Cô gái trẻ tóc vàng mắt xanh">${npc.appearance || ''}</textarea>
                     </div>
                     <div class="horae-edit-field">
-                        <label>性格</label>
-                        <input type="text" id="edit-npc-personality" value="${npc.personality || ''}" placeholder="如：开朗活泼">
+                        <label>Tính cách</label>
+                        <input type="text" id="edit-npc-personality" value="${npc.personality || ''}" placeholder="Ví dụ: Vui vẻ hoạt bát">
                     </div>
                     <div class="horae-edit-field">
-                        <label>身份关系</label>
-                        <input type="text" id="edit-npc-relationship" value="${npc.relationship || ''}" placeholder="如：主角的邻居">
+                        <label>Thân phận quan hệ</label>
+                        <input type="text" id="edit-npc-relationship" value="${npc.relationship || ''}" placeholder="Ví dụ: Hàng xóm của nhân vật chính">
                     </div>
                     <div class="horae-edit-field">
-                        <label>补充说明</label>
-                        <input type="text" id="edit-npc-note" value="${npc.note || ''}" placeholder="其他重要信息（可选）">
+                        <label>Bổ sung thông tin</label>
+                        <input type="text" id="edit-npc-note" value="${npc.note || ''}" placeholder="Thông tin quan trọng khác (Tùy chọn)">
                     </div>
                 </div>
                 <div class="horae-modal-footer">
                     <button id="edit-modal-delete" class="menu_button danger" style="background:#c62828;color:#fff;margin-right:auto;">
-                        <i class="fa-solid fa-trash"></i> 删除角色
+                        <i class="fa-solid fa-trash"></i> Xóa nhân vật
                     </button>
                     <button id="edit-modal-save" class="menu_button primary">
-                        <i class="fa-solid fa-check"></i> 保存
+                        <i class="fa-solid fa-check"></i> Lưu
                     </button>
                     <button id="edit-modal-cancel" class="menu_button">
-                        <i class="fa-solid fa-xmark"></i> 取消
+                        <i class="fa-solid fa-xmark"></i> Hủy
                     </button>
                 </div>
             </div>
@@ -1603,11 +1602,11 @@ function openNpcEditModal(npcName) {
     document.body.insertAdjacentHTML('beforeend', modalHtml);
     preventModalBubble();
     
-    // 删除NPC
+    // Xóa NPC
     document.getElementById('edit-modal-delete').addEventListener('click', async (e) => {
         e.stopPropagation();
         e.stopImmediatePropagation();
-        if (!confirm(`确定要删除角色「${npcName}」吗？\n\n此操作将从所有聊天记录中移除该角色的信息，且无法恢复。`)) return;
+        if (!confirm(`Bạn có chắc chắn muốn xóa nhân vật 「${npcName}」 không?\n\nThao tác này sẽ xóa thông tin của nhân vật này khỏi tất cả lịch sử trò chuyện và không thể khôi phục.`)) return;
         
         const chat = horaeManager.getChat();
         for (let i = 0; i < chat.length; i++) {
@@ -1615,13 +1614,13 @@ function openNpcEditModal(npcName) {
             if (meta?.npcs?.[npcName]) {
                 delete meta.npcs[npcName];
             }
-            // 同时清除好感度中的相关记录
+            // Đồng thời xóa hồ sơ liên quan trong độ hảo cảm
             if (meta?.affection?.[npcName]) {
                 delete meta.affection[npcName];
             }
         }
         
-        // 从星标列表移除
+        // Xóa khỏi danh sách đánh dấu sao
         if (settings.pinnedNpcs) {
             const pinIdx = settings.pinnedNpcs.indexOf(npcName);
             if (pinIdx !== -1) {
@@ -1633,10 +1632,10 @@ function openNpcEditModal(npcName) {
         await getContext().saveChat();
         closeEditModal();
         refreshAllDisplays();
-        showToast(`角色「${npcName}」已删除`, 'success');
+        showToast(`Nhân vật 「${npcName}」 đã bị xóa`, 'success');
     });
     
-    // 保存NPC编辑
+    // Lưu chỉnh sửa NPC
     document.getElementById('edit-modal-save').addEventListener('click', async (e) => {
         e.stopPropagation();
         e.stopImmediatePropagation();
@@ -1653,14 +1652,14 @@ function openNpcEditModal(npcName) {
             note: document.getElementById('edit-npc-note').value
         };
         
-        // 如果用户手动修改了年龄，更新参考日期
+        // Nếu người dùng sửa tuổi thủ công, cập nhật ngày tham chiếu
         const currentState = horaeManager.getLatestState();
         const ageChanged = newAge !== (npc.age || '');
         if (ageChanged && newAge) {
             newData._ageRefDate = currentState.timestamp?.story_date || '';
         }
         
-        // 处理重要角色标记
+        // Xử lý đánh dấu nhân vật quan trọng
         const newPinned = document.getElementById('edit-npc-pinned').checked;
         if (!settings.pinnedNpcs) settings.pinnedNpcs = [];
         const pinIdx = settings.pinnedNpcs.indexOf(npcName);
@@ -1681,7 +1680,7 @@ function openNpcEditModal(npcName) {
         await getContext().saveChat();
         closeEditModal();
         updateCharactersDisplay();
-        showToast('角色已更新', 'success');
+        showToast('Nhân vật đã được cập nhật', 'success');
     });
     
     document.getElementById('edit-modal-cancel').addEventListener('click', (e) => {
@@ -1691,15 +1690,15 @@ function openNpcEditModal(npcName) {
     });
 }
 
-/** 打开事件编辑弹窗 */
+/** Mở popup chỉnh sửa sự kiện */
 function openEventEditModal(messageId, eventIndex = 0) {
     const meta = horaeManager.getMessageMeta(messageId);
     if (!meta) {
-        showToast('找不到该消息的元数据', 'error');
+        showToast('Không tìm thấy siêu dữ liệu của tin nhắn này', 'error');
         return;
     }
     
-    // 兼容新旧事件格式
+    // Tương thích định dạng sự kiện cũ và mới
     const eventsArr = meta.events || (meta.event ? [meta.event] : []);
     const event = eventsArr[eventIndex] || {};
     const totalEvents = eventsArr.length;
@@ -1708,31 +1707,31 @@ function openEventEditModal(messageId, eventIndex = 0) {
         <div id="horae-edit-modal" class="horae-modal">
             <div class="horae-modal-content">
                 <div class="horae-modal-header">
-                    <i class="fa-solid fa-pen"></i> 编辑事件 #${messageId}${totalEvents > 1 ? ` (${eventIndex + 1}/${totalEvents})` : ''}
+                    <i class="fa-solid fa-pen"></i> Chỉnh sửa sự kiện #${messageId}${totalEvents > 1 ? ` (${eventIndex + 1}/${totalEvents})` : ''}
                 </div>
                 <div class="horae-modal-body horae-edit-modal-body">
                     <div class="horae-edit-field">
-                        <label>事件级别</label>
+                        <label>Cấp độ sự kiện</label>
                         <select id="edit-event-level">
-                            <option value="一般" ${event.level === '一般' || !event.level ? 'selected' : ''}>一般</option>
-                            <option value="重要" ${event.level === '重要' ? 'selected' : ''}>重要</option>
-                            <option value="关键" ${event.level === '关键' ? 'selected' : ''}>关键</option>
+                            <option value="一般" ${event.level === '一般' || !event.level ? 'selected' : ''}>Bình thường</option>
+                            <option value="重要" ${event.level === '重要' ? 'selected' : ''}>Quan trọng</option>
+                            <option value="关键" ${event.level === '关键' ? 'selected' : ''}>Then chốt</option>
                         </select>
                     </div>
                     <div class="horae-edit-field">
-                        <label>事件摘要</label>
-                        <textarea id="edit-event-summary" placeholder="描述这个事件...">${event.summary || ''}</textarea>
+                        <label>Tóm tắt sự kiện</label>
+                        <textarea id="edit-event-summary" placeholder="Mô tả sự kiện này...">${event.summary || ''}</textarea>
                     </div>
                 </div>
                 <div class="horae-modal-footer">
                     <button id="edit-modal-delete" class="menu_button danger">
-                        <i class="fa-solid fa-trash"></i> 删除
+                        <i class="fa-solid fa-trash"></i> Xóa
                     </button>
                     <button id="edit-modal-save" class="menu_button primary">
-                        <i class="fa-solid fa-check"></i> 保存
+                        <i class="fa-solid fa-check"></i> Lưu
                     </button>
                     <button id="edit-modal-cancel" class="menu_button">
-                        <i class="fa-solid fa-xmark"></i> 取消
+                        <i class="fa-solid fa-xmark"></i> Hủy
                     </button>
                 </div>
             </div>
@@ -1751,12 +1750,12 @@ function openEventEditModal(messageId, eventIndex = 0) {
             const newLevel = document.getElementById('edit-event-level').value;
             const newSummary = document.getElementById('edit-event-summary').value.trim();
             
-            // 防呆提示：摘要为空等同于删除
+            // Nhắc nhở: Tóm tắt trống tương đương với xóa
             if (!newSummary) {
-                if (!confirm('事件摘要为空！\n\n保存后此事件将被删除。\n\n确定要删除此事件吗？')) {
+                if (!confirm('Tóm tắt sự kiện trống!\n\nSau khi lưu sự kiện này sẽ bị xóa.\n\nBạn có chắc chắn muốn xóa sự kiện này không?')) {
                     return;
                 }
-                // 用户确认删除，执行删除逻辑
+                // Người dùng xác nhận xóa, thực hiện logic xóa
                 if (!chatMeta.events) {
                     chatMeta.events = chatMeta.event ? [chatMeta.event] : [];
                 }
@@ -1768,16 +1767,16 @@ function openEventEditModal(messageId, eventIndex = 0) {
                 await getContext().saveChat();
                 closeEditModal();
                 updateTimelineDisplay();
-                showToast('事件已删除', 'success');
+                showToast('Sự kiện đã bị xóa', 'success');
                 return;
             }
             
-            // 确保events数组存在
+            // Đảm bảo mảng events tồn tại
             if (!chatMeta.events) {
                 chatMeta.events = chatMeta.event ? [chatMeta.event] : [];
             }
             
-            // 更新或添加事件
+            // Cập nhật hoặc thêm sự kiện
             if (chatMeta.events[eventIndex]) {
                 chatMeta.events[eventIndex] = {
                     is_important: newLevel === '重要' || newLevel === '关键',
@@ -1792,41 +1791,41 @@ function openEventEditModal(messageId, eventIndex = 0) {
                 });
             }
             
-            // 清除旧格式
+            // Xóa định dạng cũ
             delete chatMeta.event;
         }
         
         await getContext().saveChat();
         closeEditModal();
         updateTimelineDisplay();
-        showToast('事件已更新', 'success');
+        showToast('Sự kiện đã được cập nhật', 'success');
     });
     
-    // 删除事件（带确认）
+    // Xóa sự kiện (có xác nhận)
     document.getElementById('edit-modal-delete').addEventListener('click', (e) => {
         e.stopPropagation();
         e.stopImmediatePropagation();
-        if (confirm('确定要删除这个事件吗？\n\n⚠️ 此操作无法撤销！')) {
+        if (confirm('Bạn có chắc chắn muốn xóa sự kiện này không?\n\n⚠️ Thao tác này không thể hoàn tác!')) {
             const chat = horaeManager.getChat();
             const chatMeta = chat[messageId]?.horae_meta;
             if (chatMeta) {
-                // 确保events数组存在
+                // Đảm bảo mảng events tồn tại
                 if (!chatMeta.events) {
                     chatMeta.events = chatMeta.event ? [chatMeta.event] : [];
                 }
                 
-                // 删除指定索引的事件
+                // Xóa sự kiện theo chỉ mục chỉ định
                 if (chatMeta.events.length > eventIndex) {
                     chatMeta.events.splice(eventIndex, 1);
                 }
                 
-                // 清除旧格式
+                // Xóa định dạng cũ
                 delete chatMeta.event;
                 
                 getContext().saveChat();
                 closeEditModal();
                 updateTimelineDisplay();
-                showToast('事件已删除', 'success');
+                showToast('Sự kiện đã bị xóa', 'success');
             }
         }
     });
@@ -1839,16 +1838,16 @@ function openEventEditModal(messageId, eventIndex = 0) {
 }
 
 /**
- * 关闭编辑弹窗
+ * Đóng popup chỉnh sửa
  */
 function closeEditModal() {
     const modal = document.getElementById('horae-edit-modal');
     if (modal) modal.remove();
 }
 
-/** 阻止编辑弹窗事件冒泡 */
+/** Ngăn chặn sự kiện nổi bọt của popup chỉnh sửa */
 function preventModalBubble() {
-    // 阻止事件冒泡
+    // Ngăn chặn sự kiện nổi bọt
     const targets = [
         document.getElementById('horae-edit-modal'),
         ...document.querySelectorAll('.horae-edit-modal-backdrop')
@@ -1864,13 +1863,13 @@ function preventModalBubble() {
 }
 
 // ============================================
-// Excel风格自定义表格功能
+// Chức năng bảng tùy chỉnh kiểu Excel
 // ============================================
 
 let activeContextMenu = null;
 
 /**
- * 渲染自定义表格列表
+ * Render danh sách bảng tùy chỉnh
  */
 function renderCustomTablesList() {
     const listEl = document.getElementById('horae-custom-tables-list');
@@ -1882,8 +1881,8 @@ function renderCustomTablesList() {
         listEl.innerHTML = `
             <div class="horae-custom-tables-empty">
                 <i class="fa-solid fa-table-cells"></i>
-                <div>暂无自定义表格</div>
-                <div style="font-size:11px;opacity:0.7;margin-top:4px;">点击下方按钮添加（表格跟随当前对话保存）</div>
+                <div>Không có bảng tùy chỉnh</div>
+                <div style="font-size:11px;opacity:0.7;margin-top:4px;">Nhấn nút bên dưới để thêm (Bảng được lưu theo cuộc trò chuyện hiện tại)</div>
             </div>
         `;
         return;
@@ -1894,7 +1893,7 @@ function renderCustomTablesList() {
         const cols = table.cols || 2;
         const data = table.data || {};
         
-        // 生成表格HTML
+        // Tạo HTML bảng
         let tableHtml = '<table class="horae-excel-table">';
         for (let r = 0; r < rows; r++) {
             tableHtml += '<tr>';
@@ -1903,11 +1902,11 @@ function renderCustomTablesList() {
                 const cellValue = data[cellKey] || '';
                 const isHeader = r === 0 || c === 0;
                 const tag = isHeader ? 'th' : 'td';
-                // 动态计算输入框宽度
+                // Tính toán độ rộng ô nhập liệu động
                 const charLen = [...cellValue].reduce((sum, ch) => sum + (/[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]/.test(ch) ? 2 : 1), 0);
                 const inputSize = Math.max(4, Math.min(charLen + 2, 40));
                 tableHtml += `<${tag} data-row="${r}" data-col="${c}">`;
-                tableHtml += `<input type="text" value="${escapeHtml(cellValue)}" size="${inputSize}" data-table="${tableIndex}" data-row="${r}" data-col="${c}" placeholder="${isHeader ? '表头' : ''}">`;
+                tableHtml += `<input type="text" value="${escapeHtml(cellValue)}" size="${inputSize}" data-table="${tableIndex}" data-row="${r}" data-col="${c}" placeholder="${isHeader ? 'Tiêu đề bảng' : ''}">`;
                 tableHtml += `</${tag}>`;
             }
             tableHtml += '</tr>';
@@ -1919,13 +1918,13 @@ function renderCustomTablesList() {
                 <div class="horae-excel-table-header">
                     <div class="horae-excel-table-title">
                         <i class="fa-solid fa-table"></i>
-                        <input type="text" value="${escapeHtml(table.name || '')}" placeholder="表格名称" data-table-name="${tableIndex}">
+                        <input type="text" value="${escapeHtml(table.name || '')}" placeholder="Tên bảng" data-table-name="${tableIndex}">
                     </div>
                     <div class="horae-excel-table-actions">
-                        <button class="export-table-btn" title="导出表格" data-table-index="${tableIndex}">
+                        <button class="export-table-btn" title="Xuất bảng" data-table-index="${tableIndex}">
                             <i class="fa-solid fa-download"></i>
                         </button>
-                        <button class="delete-table-btn danger" title="删除表格">
+                        <button class="delete-table-btn danger" title="Xóa bảng">
                             <i class="fa-solid fa-trash-can"></i>
                         </button>
                     </div>
@@ -1934,7 +1933,7 @@ function renderCustomTablesList() {
                     ${tableHtml}
                 </div>
                 <div class="horae-table-prompt-row">
-                    <input type="text" value="${escapeHtml(table.prompt || '')}" placeholder="提示词：告诉AI如何填写此表格..." data-table-prompt="${tableIndex}">
+                    <input type="text" value="${escapeHtml(table.prompt || '')}" placeholder="Từ gợi ý: Bảo AI cách điền bảng này..." data-table-prompt="${tableIndex}">
                 </div>
             </div>
         `;
@@ -1944,7 +1943,7 @@ function renderCustomTablesList() {
 }
 
 /**
- * HTML转义
+ * Escape HTML
  */
 function escapeHtml(str) {
     if (!str) return '';
@@ -1956,10 +1955,10 @@ function escapeHtml(str) {
 }
 
 /**
- * 绑定Excel表格事件
+ * Ràng buộc sự kiện bảng Excel
  */
 function bindExcelTableEvents() {
-    // 单元格输入事件 - 自动保存 + 动态调整宽度
+    // Sự kiện nhập ô - Tự động lưu + điều chỉnh độ rộng
     document.querySelectorAll('.horae-excel-table input').forEach(input => {
         input.addEventListener('change', (e) => {
             const tableIndex = parseInt(e.target.dataset.table);
@@ -1981,7 +1980,7 @@ function bindExcelTableEvents() {
         });
     });
     
-    // 表格名称输入事件
+    // Sự kiện nhập tên bảng
     document.querySelectorAll('[data-table-name]').forEach(input => {
         input.addEventListener('change', (e) => {
             const tableIndex = parseInt(e.target.dataset.tableName);
@@ -1991,7 +1990,7 @@ function bindExcelTableEvents() {
         });
     });
     
-    // 表格提示词输入事件
+    // Sự kiện nhập từ gợi ý bảng
     document.querySelectorAll('[data-table-prompt]').forEach(input => {
         input.addEventListener('change', (e) => {
             const tableIndex = parseInt(e.target.dataset.tablePrompt);
@@ -2001,7 +2000,7 @@ function bindExcelTableEvents() {
         });
     });
     
-    // 导出表格按钮
+    // Nút xuất bảng
     document.querySelectorAll('.export-table-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -2010,7 +2009,7 @@ function bindExcelTableEvents() {
         });
     });
     
-    // 删除表格按钮
+    // Nút xóa bảng
     document.querySelectorAll('.delete-table-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             const container = btn.closest('.horae-excel-table-container');
@@ -2019,7 +2018,7 @@ function bindExcelTableEvents() {
         });
     });
     
-    // 表头长按显示右键菜单
+    // Nhấn giữ tiêu đề hiển thị menu chuột phải
     document.querySelectorAll('.horae-excel-table th').forEach(th => {
         let pressTimer = null;
         
@@ -2059,7 +2058,7 @@ function bindExcelTableEvents() {
         });
         th.addEventListener('touchcancel', cancelPress);
         
-        // 右键菜单
+        // Menu chuột phải
         th.addEventListener('contextmenu', (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -2073,36 +2072,36 @@ function bindExcelTableEvents() {
     
 }
 
-/** 显示表格右键菜单 */
+/** Hiển thị menu chuột phải bảng */
 let contextMenuCloseHandler = null;
 
 function showTableContextMenu(e, tableIndex, row, col) {
     hideContextMenu();
     
-    const isRowHeader = col === 0 && row > 0;  // 第一列（非第一行）= 行操作
-    const isColHeader = row === 0 && col > 0;  // 第一行（非第一列）= 列操作
-    const isCorner = row === 0 && col === 0;   // 左上角
+    const isRowHeader = col === 0 && row > 0;  // Cột đầu tiên (không phải hàng đầu) = Thao tác hàng
+    const isColHeader = row === 0 && col > 0;  // Hàng đầu tiên (không phải cột đầu) = Thao tác cột
+    const isCorner = row === 0 && col === 0;   // Góc trên trái
     
     let menuItems = '';
     
     if (isCorner) {
         menuItems = `
-            <div class="horae-context-menu-item" data-action="add-row-below"><i class="fa-solid fa-plus"></i> 添加行</div>
-            <div class="horae-context-menu-item" data-action="add-col-right"><i class="fa-solid fa-plus"></i> 添加列</div>
+            <div class="horae-context-menu-item" data-action="add-row-below"><i class="fa-solid fa-plus"></i> Thêm hàng</div>
+            <div class="horae-context-menu-item" data-action="add-col-right"><i class="fa-solid fa-plus"></i> Thêm cột</div>
         `;
     } else if (isColHeader) {
         menuItems = `
-            <div class="horae-context-menu-item" data-action="add-col-left"><i class="fa-solid fa-arrow-left"></i> 左侧添加列</div>
-            <div class="horae-context-menu-item" data-action="add-col-right"><i class="fa-solid fa-arrow-right"></i> 右侧添加列</div>
+            <div class="horae-context-menu-item" data-action="add-col-left"><i class="fa-solid fa-arrow-left"></i> Thêm cột bên trái</div>
+            <div class="horae-context-menu-item" data-action="add-col-right"><i class="fa-solid fa-arrow-right"></i> Thêm cột bên phải</div>
             <div class="horae-context-menu-divider"></div>
-            <div class="horae-context-menu-item danger" data-action="delete-col"><i class="fa-solid fa-trash-can"></i> 删除此列</div>
+            <div class="horae-context-menu-item danger" data-action="delete-col"><i class="fa-solid fa-trash-can"></i> Xóa cột này</div>
         `;
     } else if (isRowHeader) {
         menuItems = `
-            <div class="horae-context-menu-item" data-action="add-row-above"><i class="fa-solid fa-arrow-up"></i> 上方添加行</div>
-            <div class="horae-context-menu-item" data-action="add-row-below"><i class="fa-solid fa-arrow-down"></i> 下方添加行</div>
+            <div class="horae-context-menu-item" data-action="add-row-above"><i class="fa-solid fa-arrow-up"></i> Thêm hàng phía trên</div>
+            <div class="horae-context-menu-item" data-action="add-row-below"><i class="fa-solid fa-arrow-down"></i> Thêm hàng phía dưới</div>
             <div class="horae-context-menu-divider"></div>
-            <div class="horae-context-menu-item danger" data-action="delete-row"><i class="fa-solid fa-trash-can"></i> 删除此行</div>
+            <div class="horae-context-menu-item danger" data-action="delete-row"><i class="fa-solid fa-trash-can"></i> Xóa hàng này</div>
         `;
     } else {
         return;
@@ -2112,7 +2111,7 @@ function showTableContextMenu(e, tableIndex, row, col) {
     menu.className = 'horae-context-menu';
     menu.innerHTML = menuItems;
     
-    // 获取位置
+    // Lấy vị trí
     const x = e.clientX || e.touches?.[0]?.clientX || 100;
     const y = e.clientY || e.touches?.[0]?.clientY || 100;
     menu.style.left = `${x}px`;
@@ -2121,7 +2120,7 @@ function showTableContextMenu(e, tableIndex, row, col) {
     document.body.appendChild(menu);
     activeContextMenu = menu;
     
-    // 确保菜单不超出屏幕
+    // Đảm bảo menu không vượt quá màn hình
     const rect = menu.getBoundingClientRect();
     if (rect.right > window.innerWidth) {
         menu.style.left = `${window.innerWidth - rect.width - 10}px`;
@@ -2130,7 +2129,7 @@ function showTableContextMenu(e, tableIndex, row, col) {
         menu.style.top = `${window.innerHeight - rect.height - 10}px`;
     }
     
-    // 绑定菜单项点击 - 执行操作后关闭菜单
+    // Ràng buộc click item menu - Thực hiện hành động xong đóng menu
     menu.querySelectorAll('.horae-context-menu-item').forEach(item => {
         item.addEventListener('click', (ev) => {
             ev.preventDefault();
@@ -2162,7 +2161,7 @@ function showTableContextMenu(e, tableIndex, row, col) {
         });
     });
     
-    // 延迟绑定，避免当前事件触发
+    // Trì hoãn ràng buộc, tránh kích hoạt sự kiện hiện tại
     setTimeout(() => {
         contextMenuCloseHandler = (ev) => {
             if (activeContextMenu && !activeContextMenu.contains(ev.target)) {
@@ -2178,7 +2177,7 @@ function showTableContextMenu(e, tableIndex, row, col) {
 }
 
 /**
- * 隐藏右键菜单
+ * Ẩn menu chuột phải
  */
 function hideContextMenu() {
     if (contextMenuCloseHandler) {
@@ -2194,7 +2193,7 @@ function hideContextMenu() {
 }
 
 /**
- * 执行表格操作
+ * Thực hiện hành động bảng
  */
 function executeTableAction(tableIndex, row, col, action) {
     const tables = getChatTables();
@@ -2249,7 +2248,7 @@ function executeTableAction(tableIndex, row, col, action) {
             
         case 'delete-row':
             if (oldRows <= 2) {
-                showToast('表格至少需要2行', 'warning');
+                showToast('Bảng cần ít nhất 2 hàng', 'warning');
                 return;
             }
             table.rows = oldRows - 1;
@@ -2264,7 +2263,7 @@ function executeTableAction(tableIndex, row, col, action) {
             
         case 'delete-col':
             if (oldCols <= 2) {
-                showToast('表格至少需要2列', 'warning');
+                showToast('Bảng cần ít nhất 2 cột', 'warning');
                 return;
             }
             table.cols = oldCols - 1;
@@ -2283,7 +2282,7 @@ function executeTableAction(tableIndex, row, col, action) {
 }
 
 /**
- * 添加新的2x2表格
+ * Thêm bảng 2x2 mới
  */
 function addNewExcelTable() {
     const tables = getChatTables();
@@ -2302,24 +2301,24 @@ function addNewExcelTable() {
     
     setChatTables(tables);
     renderCustomTablesList();
-    showToast('已添加新表格', 'success');
+    showToast('Đã thêm bảng mới', 'success');
 }
 
 /**
- * 删除表格
+ * Xóa bảng
  */
 function deleteCustomTable(index) {
-    if (!confirm('确定要删除此表格吗？')) return;
+    if (!confirm('Bạn có chắc chắn muốn xóa bảng này không?')) return;
     
     const tables = getChatTables();
     tables.splice(index, 1);
     setChatTables(tables);
     renderCustomTablesList();
-    showToast('表格已删除', 'info');
+    showToast('Bảng đã bị xóa', 'info');
 }
 
 /**
- * 绑定物品列表事件（长按、点击）
+ * Ràng buộc sự kiện danh sách vật phẩm (nhấn giữ, click)
  */
 function bindItemsEvents() {
     const items = document.querySelectorAll('#horae-items-full-list .horae-full-item');
@@ -2328,7 +2327,7 @@ function bindItemsEvents() {
         const itemName = item.dataset.itemName;
         if (!itemName) return;
         
-        // 长按进入多选模式
+        // Nhấn giữ để vào chế độ đa chọn
         item.addEventListener('mousedown', (e) => startLongPress(e, itemName));
         item.addEventListener('touchstart', (e) => startLongPress(e, itemName), { passive: true });
         item.addEventListener('mouseup', cancelLongPress);
@@ -2336,7 +2335,7 @@ function bindItemsEvents() {
         item.addEventListener('touchend', cancelLongPress);
         item.addEventListener('touchcancel', cancelLongPress);
         
-        // 多选模式下点击切换选中
+        // Click để chuyển đổi chọn trong chế độ đa chọn
         item.addEventListener('click', () => {
             if (itemsMultiSelectMode) {
                 toggleItemSelection(itemName);
@@ -2346,18 +2345,18 @@ function bindItemsEvents() {
 }
 
 /**
- * 开始长按计时
+ * Bắt đầu đếm thời gian nhấn giữ
  */
 function startLongPress(e, itemName) {
-    if (itemsMultiSelectMode) return; // 已在多选模式
+    if (itemsMultiSelectMode) return; // Đã ở chế độ đa chọn
     
     longPressTimer = setTimeout(() => {
         enterMultiSelectMode(itemName);
-    }, 800); // 800ms 长按触发（延长防止误触）
+    }, 800); // 800ms nhấn giữ kích hoạt (kéo dài để tránh chạm nhầm)
 }
 
 /**
- * 取消长按
+ * Hủy nhấn giữ
  */
 function cancelLongPress() {
     if (longPressTimer) {
@@ -2367,7 +2366,7 @@ function cancelLongPress() {
 }
 
 /**
- * 进入多选模式
+ * Vào chế độ đa chọn
  */
 function enterMultiSelectMode(initialItem) {
     itemsMultiSelectMode = true;
@@ -2376,32 +2375,32 @@ function enterMultiSelectMode(initialItem) {
         selectedItems.add(initialItem);
     }
     
-    // 显示多选工具栏
+    // Hiển thị thanh công cụ đa chọn
     const bar = document.getElementById('horae-items-multiselect-bar');
     if (bar) bar.style.display = 'flex';
     
-    // 隐藏提示
+    // Ẩn gợi ý
     const hint = document.querySelector('#horae-tab-items .horae-items-hint');
     if (hint) hint.style.display = 'none';
     
     updateItemsDisplay();
     updateSelectedCount();
     
-    showToast('已进入多选模式', 'info');
+    showToast('Đã vào chế độ đa chọn', 'info');
 }
 
 /**
- * 退出多选模式
+ * Thoát chế độ đa chọn
  */
 function exitMultiSelectMode() {
     itemsMultiSelectMode = false;
     selectedItems.clear();
     
-    // 隐藏多选工具栏
+    // Ẩn thanh công cụ đa chọn
     const bar = document.getElementById('horae-items-multiselect-bar');
     if (bar) bar.style.display = 'none';
     
-    // 显示提示
+    // Hiển thị gợi ý
     const hint = document.querySelector('#horae-tab-items .horae-items-hint');
     if (hint) hint.style.display = 'block';
     
@@ -2409,7 +2408,7 @@ function exitMultiSelectMode() {
 }
 
 /**
- * 切换物品选中状态
+ * Chuyển đổi trạng thái chọn vật phẩm
  */
 function toggleItemSelection(itemName) {
     if (selectedItems.has(itemName)) {
@@ -2418,7 +2417,7 @@ function toggleItemSelection(itemName) {
         selectedItems.add(itemName);
     }
     
-    // 更新UI
+    // Cập nhật UI
     const item = document.querySelector(`#horae-items-full-list .horae-full-item[data-item-name="${itemName}"]`);
     if (item) {
         const checkbox = item.querySelector('input[type="checkbox"]');
@@ -2430,7 +2429,7 @@ function toggleItemSelection(itemName) {
 }
 
 /**
- * 全选物品
+ * Chọn tất cả vật phẩm
  */
 function selectAllItems() {
     const items = document.querySelectorAll('#horae-items-full-list .horae-full-item');
@@ -2443,7 +2442,7 @@ function selectAllItems() {
 }
 
 /**
- * 更新选中数量显示
+ * Cập nhật hiển thị số lượng đã chọn
  */
 function updateSelectedCount() {
     const countEl = document.getElementById('horae-items-selected-count');
@@ -2451,19 +2450,19 @@ function updateSelectedCount() {
 }
 
 /**
- * 删除选中的物品
+ * Xóa các vật phẩm đã chọn
  */
 async function deleteSelectedItems() {
     if (selectedItems.size === 0) {
-        showToast('没有选中任何物品', 'warning');
+        showToast('Chưa chọn vật phẩm nào', 'warning');
         return;
     }
     
-    // 确认对话框
-    const confirmed = confirm(`确定要删除选中的 ${selectedItems.size} 个物品吗？\n\n此操作会从所有历史记录中移除这些物品，不可撤销。`);
+    // Hộp thoại xác nhận
+    const confirmed = confirm(`Bạn có chắc chắn muốn xóa ${selectedItems.size} vật phẩm đã chọn không?\n\nThao tác này sẽ xóa các vật phẩm này khỏi tất cả lịch sử ghi chép, không thể hoàn tác.`);
     if (!confirmed) return;
     
-    // 从所有消息的 meta 中删除这些物品
+    // Xóa các vật phẩm này khỏi meta của tất cả tin nhắn
     const chat = horaeManager.getChat();
     const itemsToDelete = Array.from(selectedItems);
     
@@ -2478,17 +2477,17 @@ async function deleteSelectedItems() {
         }
     }
     
-    // 保存更改
+    // Lưu thay đổi
     await getContext().saveChat();
     
-    showToast(`已删除 ${itemsToDelete.length} 个物品`, 'success');
+    showToast(`Đã xóa ${itemsToDelete.length} vật phẩm`, 'success');
     
     exitMultiSelectMode();
     updateStatusDisplay();
 }
 
 /**
- * 刷新所有显示
+ * Làm mới tất cả hiển thị
  */
 function refreshAllDisplays() {
     updateStatusDisplay();
@@ -2499,7 +2498,7 @@ function refreshAllDisplays() {
 }
 
 /**
- * 滚动到指定消息
+ * Cuộn đến tin nhắn chỉ định
  */
 function scrollToMessage(messageId) {
     const messageEl = document.querySelector(`.mes[mesid="${messageId}"]`);
@@ -2511,7 +2510,7 @@ function scrollToMessage(messageId) {
 }
 
 /**
- * 为消息添加元数据面板
+ * Thêm bảng điều khiển siêu dữ liệu cho tin nhắn
  */
 function addMessagePanel(messageEl, messageIndex) {
     const existingPanel = messageEl.querySelector('.horae-message-panel');
@@ -2520,7 +2519,7 @@ function addMessagePanel(messageEl, messageIndex) {
     const meta = horaeManager.getMessageMeta(messageIndex);
     if (!meta) return;
     
-    // 格式化时间（标准日历添加周几）
+    // Định dạng thời gian (Lịch chuẩn thêm thứ mấy)
     let time = '--';
     if (meta.timestamp?.story_date) {
         const parsed = parseStoryDate(meta.timestamp.story_date);
@@ -2533,11 +2532,11 @@ function addMessagePanel(messageEl, messageIndex) {
             time += ' ' + meta.timestamp.story_time;
         }
     }
-    // 兼容新旧事件格式
+    // Tương thích định dạng sự kiện cũ và mới
     const eventsArr = meta.events || (meta.event ? [meta.event] : []);
     const eventSummary = eventsArr.length > 0 
         ? eventsArr.map(e => e.summary).join(' | ') 
-        : '无特殊事件';
+        : 'Không có sự kiện đặc biệt';
     const charCount = meta.scene?.characters_present?.length || 0;
     
     const panelHtml = `
@@ -2551,13 +2550,13 @@ function addMessagePanel(messageEl, messageIndex) {
                     <span class="horae-summary-divider">|</span>
                     <span class="horae-summary-event">${eventSummary}</span>
                     <span class="horae-summary-divider">|</span>
-                    <span class="horae-summary-chars">${charCount}人在场</span>
+                    <span class="horae-summary-chars">${charCount} người có mặt</span>
                 </div>
                 <div class="horae-panel-actions">
-                    <button class="horae-btn-rescan" title="重新扫描此消息">
+                    <button class="horae-btn-rescan" title="Quét lại tin nhắn này">
                         <i class="fa-solid fa-rotate"></i>
                     </button>
-                    <button class="horae-btn-expand" title="展开/收起">
+                    <button class="horae-btn-expand" title="Mở rộng/Thu gọn">
                         <i class="fa-solid fa-chevron-down"></i>
                     </button>
                 </div>
@@ -2580,11 +2579,11 @@ function addMessagePanel(messageEl, messageIndex) {
 }
 
 /**
- * 构建已删除物品显示
+ * Xây dựng hiển thị vật phẩm đã xóa
  */
 function buildDeletedItemsDisplay(deletedItems) {
     if (!deletedItems || deletedItems.length === 0) {
-        return '<div class="horae-empty-hint">无物品消耗</div>';
+        return '<div class="horae-empty-hint">Không tiêu hao vật phẩm</div>';
     }
     return deletedItems.map(item => `
         <div class="horae-deleted-item-tag">
@@ -2594,50 +2593,50 @@ function buildDeletedItemsDisplay(deletedItems) {
 }
 
 /**
- * 构建待办事项编辑行
+ * Xây dựng hàng chỉnh sửa việc cần làm
  */
 function buildAgendaEditorRows(agenda) {
     if (!agenda || agenda.length === 0) {
-        return '<div class="horae-empty-hint">无待办事项</div>';
+        return '<div class="horae-empty-hint">Không có việc cần làm</div>';
     }
     return agenda.map(item => `
         <div class="horae-editor-row horae-agenda-edit-row">
-            <input type="text" class="agenda-date" style="flex:0 0 90px;max-width:90px;" value="${escapeHtml(item.date || '')}" placeholder="日期">
-            <input type="text" class="agenda-text" style="flex:1 1 0;min-width:0;" value="${escapeHtml(item.text || '')}" placeholder="待办内容（相对时间请标注绝对日期）">
+            <input type="text" class="agenda-date" style="flex:0 0 90px;max-width:90px;" value="${escapeHtml(item.date || '')}" placeholder="Ngày">
+            <input type="text" class="agenda-text" style="flex:1 1 0;min-width:0;" value="${escapeHtml(item.text || '')}" placeholder="Nội dung cần làm (thời gian tương đối vui lòng ghi chú ngày tuyệt đối)">
             <button class="delete-btn"><i class="fa-solid fa-xmark"></i></button>
         </div>
     `).join('');
 }
 
 /**
- * 构建面板详细内容
+ * Xây dựng nội dung chi tiết bảng điều khiển
  */
 function buildPanelContent(messageIndex, meta) {
     const costumeRows = Object.entries(meta.costumes || {}).map(([char, costume]) => `
         <div class="horae-editor-row">
-            <input type="text" class="char-input" value="${char}" placeholder="角色名">
-            <input type="text" value="${costume}" placeholder="服装描述">
+            <input type="text" class="char-input" value="${char}" placeholder="Tên nhân vật">
+            <input type="text" value="${costume}" placeholder="Mô tả trang phục">
             <button class="delete-btn"><i class="fa-solid fa-xmark"></i></button>
         </div>
-    `).join('') || '<div class="horae-empty-hint">无服装变化</div>';
+    `).join('') || '<div class="horae-empty-hint">Không thay đổi trang phục</div>';
     
-    // 物品分类由主页面管理，底部栏不显示
+    // Phân loại vật phẩm được quản lý bởi trang chính, thanh dưới cùng không hiển thị
     const itemRows = Object.entries(meta.items || {}).map(([name, info]) => {
         return `
             <div class="horae-editor-row horae-item-row">
                 <input type="text" class="item-icon" value="${info.icon || ''}" placeholder="📦" maxlength="2">
-                <input type="text" class="item-name" value="${name}" placeholder="物品名">
-                <input type="text" class="item-holder" value="${info.holder || ''}" placeholder="持有者">
-                <input type="text" class="item-location" value="${info.location || ''}" placeholder="位置">
+                <input type="text" class="item-name" value="${name}" placeholder="Tên vật phẩm">
+                <input type="text" class="item-holder" value="${info.holder || ''}" placeholder="Người nắm giữ">
+                <input type="text" class="item-location" value="${info.location || ''}" placeholder="Vị trí">
                 <button class="delete-btn"><i class="fa-solid fa-xmark"></i></button>
             </div>
             <div class="horae-editor-row horae-item-desc-row">
-                <input type="text" class="item-description" value="${info.description || ''}" placeholder="物品描述">
+                <input type="text" class="item-description" value="${info.description || ''}" placeholder="Mô tả vật phẩm">
             </div>
         `;
-    }).join('') || '<div class="horae-empty-hint">无物品变化</div>';
+    }).join('') || '<div class="horae-empty-hint">Không thay đổi vật phẩm</div>';
     
-    // 获取前一条消息的好感总值
+    // Lấy tổng giá trị độ hảo cảm của tin nhắn trước đó
     const prevTotals = {};
     const chat = horaeManager.getChat();
     for (let i = 0; i < messageIndex; i++) {
@@ -2657,7 +2656,7 @@ function buildPanelContent(messageIndex, meta) {
     }
     
     const affectionRows = Object.entries(meta.affection || {}).map(([key, value]) => {
-        // 解析当前层的值
+        // Phân tích giá trị của lớp hiện tại
         let delta = 0, newTotal = 0;
         const prevVal = prevTotals[key] || 0;
         
@@ -2678,26 +2677,26 @@ function buildPanelContent(messageIndex, meta) {
         return `
             <div class="horae-editor-row horae-affection-row" data-char="${key}" data-prev="${prevVal}">
                 <span class="affection-char">${key}</span>
-                <input type="text" class="affection-delta" value="${deltaStr}" placeholder="±变化">
-                <input type="number" class="affection-total" value="${newTotal}" placeholder="总值">
+                <input type="text" class="affection-delta" value="${deltaStr}" placeholder="±Thay đổi">
+                <input type="number" class="affection-total" value="${newTotal}" placeholder="Tổng">
                 <button class="delete-btn"><i class="fa-solid fa-xmark"></i></button>
             </div>
         `;
-    }).join('') || '<div class="horae-empty-hint">无好感度变化</div>';
+    }).join('') || '<div class="horae-empty-hint">Không thay đổi độ hảo cảm</div>';
     
-    // 兼容新旧事件格式
+    // Tương thích định dạng sự kiện cũ và mới
     const eventsArr = meta.events || (meta.event ? [meta.event] : []);
     const firstEvent = eventsArr[0] || {};
     const eventLevel = firstEvent.level || '';
     const eventSummary = firstEvent.summary || '';
-    const multipleEventsNote = eventsArr.length > 1 ? `<span class="horae-note">（此消息有${eventsArr.length}条事件，仅显示第一条）</span>` : '';
+    const multipleEventsNote = eventsArr.length > 1 ? `<span class="horae-note">（Tin nhắn này có ${eventsArr.length} sự kiện, chỉ hiển thị sự kiện đầu tiên）</span>` : '';
     
     return `
         <div class="horae-panel-grid">
             <div class="horae-panel-row">
-                <label><i class="fa-regular fa-clock"></i> 时间</label>
+                <label><i class="fa-regular fa-clock"></i> Thời gian</label>
                 <div class="horae-panel-value">
-                    <input type="text" class="horae-input-datetime" placeholder="日期 时间（如 2026/2/4 15:00）" value="${(() => {
+                    <input type="text" class="horae-input-datetime" placeholder="Ngày Giờ (Ví dụ 2026/2/4 15:00)" value="${(() => {
                         let val = meta.timestamp?.story_date || '';
                         if (meta.timestamp?.story_time) val += (val ? ' ' : '') + meta.timestamp.story_time;
                         return val;
@@ -2705,80 +2704,80 @@ function buildPanelContent(messageIndex, meta) {
                 </div>
             </div>
             <div class="horae-panel-row">
-                <label><i class="fa-solid fa-location-dot"></i> 地点</label>
+                <label><i class="fa-solid fa-location-dot"></i> Địa điểm</label>
                 <div class="horae-panel-value">
-                    <input type="text" class="horae-input-location" value="${meta.scene?.location || ''}" placeholder="场景位置">
+                    <input type="text" class="horae-input-location" value="${meta.scene?.location || ''}" placeholder="Vị trí bối cảnh">
                 </div>
             </div>
             <div class="horae-panel-row">
-                <label><i class="fa-solid fa-cloud"></i> 氛围</label>
+                <label><i class="fa-solid fa-cloud"></i> Bầu không khí</label>
                 <div class="horae-panel-value">
-                    <input type="text" class="horae-input-atmosphere" value="${meta.scene?.atmosphere || ''}" placeholder="场景氛围">
+                    <input type="text" class="horae-input-atmosphere" value="${meta.scene?.atmosphere || ''}" placeholder="Bầu không khí bối cảnh">
                 </div>
             </div>
             <div class="horae-panel-row">
-                <label><i class="fa-solid fa-users"></i> 在场</label>
+                <label><i class="fa-solid fa-users"></i> Có mặt</label>
                 <div class="horae-panel-value">
-                    <input type="text" class="horae-input-characters" value="${(meta.scene?.characters_present || []).join(', ')}" placeholder="角色名，用逗号分隔">
+                    <input type="text" class="horae-input-characters" value="${(meta.scene?.characters_present || []).join(', ')}" placeholder="Tên nhân vật, phân cách bằng dấu phẩy">
                 </div>
             </div>
             <div class="horae-panel-row full-width">
-                <label><i class="fa-solid fa-shirt"></i> 服装变化</label>
+                <label><i class="fa-solid fa-shirt"></i> Thay đổi trang phục</label>
                 <div class="horae-costume-editor">${costumeRows}</div>
-                <button class="horae-btn-add-costume"><i class="fa-solid fa-plus"></i> 添加</button>
+                <button class="horae-btn-add-costume"><i class="fa-solid fa-plus"></i> Thêm</button>
             </div>
             <div class="horae-panel-row full-width">
-                <label><i class="fa-solid fa-box-open"></i> 物品获得/变化</label>
+                <label><i class="fa-solid fa-box-open"></i> Nhận/Thay đổi vật phẩm</label>
                 <div class="horae-items-editor">${itemRows}</div>
-                <button class="horae-btn-add-item"><i class="fa-solid fa-plus"></i> 添加</button>
+                <button class="horae-btn-add-item"><i class="fa-solid fa-plus"></i> Thêm</button>
             </div>
             <div class="horae-panel-row full-width">
-                <label><i class="fa-solid fa-trash-can"></i> 物品消耗/删除</label>
+                <label><i class="fa-solid fa-trash-can"></i> Tiêu hao/Xóa vật phẩm</label>
                 <div class="horae-deleted-items-display">${buildDeletedItemsDisplay(meta.deletedItems)}</div>
             </div>
             <div class="horae-panel-row full-width">
-                <label><i class="fa-solid fa-bookmark"></i> 事件 ${multipleEventsNote}</label>
+                <label><i class="fa-solid fa-bookmark"></i> Sự kiện ${multipleEventsNote}</label>
                 <div class="horae-event-editor">
                     <select class="horae-input-event-level">
-                        <option value="">无</option>
-                        <option value="一般" ${eventLevel === '一般' ? 'selected' : ''}>一般</option>
-                        <option value="重要" ${eventLevel === '重要' ? 'selected' : ''}>重要</option>
-                        <option value="关键" ${eventLevel === '关键' ? 'selected' : ''}>关键</option>
+                        <option value="">Không</option>
+                        <option value="一般" ${eventLevel === '一般' ? 'selected' : ''}>Bình thường</option>
+                        <option value="重要" ${eventLevel === '重要' ? 'selected' : ''}>Quan trọng</option>
+                        <option value="关键" ${eventLevel === '关键' ? 'selected' : ''}>Then chốt</option>
                     </select>
-                    <input type="text" class="horae-input-event-summary" value="${eventSummary}" placeholder="事件摘要">
+                    <input type="text" class="horae-input-event-summary" value="${eventSummary}" placeholder="Tóm tắt sự kiện">
                 </div>
             </div>
             <div class="horae-panel-row full-width">
-                <label><i class="fa-solid fa-heart"></i> 好感度</label>
+                <label><i class="fa-solid fa-heart"></i> Độ hảo cảm</label>
                 <div class="horae-affection-editor">${affectionRows}</div>
-                <button class="horae-btn-add-affection"><i class="fa-solid fa-plus"></i> 添加</button>
+                <button class="horae-btn-add-affection"><i class="fa-solid fa-plus"></i> Thêm</button>
             </div>
             <div class="horae-panel-row full-width">
-                <label><i class="fa-solid fa-list-check"></i> 待办事项</label>
+                <label><i class="fa-solid fa-list-check"></i> Việc cần làm</label>
                 <div class="horae-agenda-editor">${buildAgendaEditorRows(meta.agenda)}</div>
-                <button class="horae-btn-add-agenda-row"><i class="fa-solid fa-plus"></i> 添加</button>
+                <button class="horae-btn-add-agenda-row"><i class="fa-solid fa-plus"></i> Thêm</button>
             </div>
         </div>
         <div class="horae-panel-rescan">
-            <div class="horae-rescan-label"><i class="fa-solid fa-rotate"></i> 重新扫描此消息</div>
+            <div class="horae-rescan-label"><i class="fa-solid fa-rotate"></i> Quét lại tin nhắn này</div>
             <div class="horae-rescan-buttons">
-                <button class="horae-btn-quick-scan menu_button" title="从现有文本中提取格式化数据（不消耗API）">
-                    <i class="fa-solid fa-bolt"></i> 快速解析
+                <button class="horae-btn-quick-scan menu_button" title="Trích xuất dữ liệu định dạng từ văn bản hiện có (không tốn API)">
+                    <i class="fa-solid fa-bolt"></i> Phân tích nhanh
                 </button>
-                <button class="horae-btn-ai-analyze menu_button" title="使用AI分析消息内容（消耗API）">
-                    <i class="fa-solid fa-wand-magic-sparkles"></i> AI分析
+                <button class="horae-btn-ai-analyze menu_button" title="Sử dụng AI phân tích nội dung tin nhắn (tốn API)">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i> AI phân tích
                 </button>
             </div>
         </div>
         <div class="horae-panel-footer">
-            <button class="horae-btn-save menu_button"><i class="fa-solid fa-check"></i> 保存</button>
-            <button class="horae-btn-cancel menu_button"><i class="fa-solid fa-xmark"></i> 取消</button>
+            <button class="horae-btn-save menu_button"><i class="fa-solid fa-check"></i> Lưu</button>
+            <button class="horae-btn-cancel menu_button"><i class="fa-solid fa-xmark"></i> Hủy</button>
         </div>
     `;
 }
 
 /**
- * 绑定面板事件
+ * Ràng buộc sự kiện bảng điều khiển
  */
 function bindPanelEvents(panelEl) {
     if (!panelEl) return;
@@ -2788,7 +2787,7 @@ function bindPanelEvents(panelEl) {
     const contentEl = panelEl.querySelector('.horae-panel-content');
     const expandBtn = panelEl.querySelector('.horae-btn-expand');
     
-    // 展开/收起 - 点击整个横条或展开按钮都会展开
+    // Mở rộng/Thu gọn - Nhấn vào thanh ngang hoặc nút mở rộng đều mở
     const rescanBtn = panelEl.querySelector('.horae-btn-rescan');
     toggleEl?.addEventListener('click', (e) => {
         if (e.target.closest('.horae-btn-expand') || e.target.closest('.horae-btn-rescan')) return;
@@ -2797,7 +2796,7 @@ function bindPanelEvents(panelEl) {
     
     expandBtn?.addEventListener('click', togglePanel);
     
-    // 重新扫描此消息
+    // Quét lại tin nhắn này
     rescanBtn?.addEventListener('click', (e) => {
         e.stopPropagation();
         rescanMessageMeta(messageId, panelEl);
@@ -2825,8 +2824,8 @@ function bindPanelEvents(panelEl) {
         
         editor.insertAdjacentHTML('beforeend', `
             <div class="horae-editor-row">
-                <input type="text" class="char-input" placeholder="角色名">
-                <input type="text" placeholder="服装描述">
+                <input type="text" class="char-input" placeholder="Tên nhân vật">
+                <input type="text" placeholder="Mô tả trang phục">
                 <button class="delete-btn"><i class="fa-solid fa-xmark"></i></button>
             </div>
         `);
@@ -2841,13 +2840,13 @@ function bindPanelEvents(panelEl) {
         editor.insertAdjacentHTML('beforeend', `
             <div class="horae-editor-row horae-item-row">
                 <input type="text" class="item-icon" placeholder="📦" maxlength="2">
-                <input type="text" class="item-name" placeholder="物品名">
-                <input type="text" class="item-holder" placeholder="持有者">
-                <input type="text" class="item-location" placeholder="位置">
+                <input type="text" class="item-name" placeholder="Tên vật phẩm">
+                <input type="text" class="item-holder" placeholder="Người nắm giữ">
+                <input type="text" class="item-location" placeholder="Vị trí">
                 <button class="delete-btn"><i class="fa-solid fa-xmark"></i></button>
             </div>
             <div class="horae-editor-row horae-item-desc-row">
-                <input type="text" class="item-description" placeholder="物品描述">
+                <input type="text" class="item-description" placeholder="Mô tả vật phẩm">
             </div>
         `);
         bindDeleteButtons(editor);
@@ -2860,9 +2859,9 @@ function bindPanelEvents(panelEl) {
         
         editor.insertAdjacentHTML('beforeend', `
             <div class="horae-editor-row horae-affection-row" data-char="" data-prev="0">
-                <input type="text" class="affection-char-input" placeholder="角色名">
-                <input type="text" class="affection-delta" value="+0" placeholder="±变化">
-                <input type="number" class="affection-total" value="0" placeholder="总值">
+                <input type="text" class="affection-char-input" placeholder="Tên nhân vật">
+                <input type="text" class="affection-delta" value="+0" placeholder="±Thay đổi">
+                <input type="number" class="affection-total" value="0" placeholder="Tổng">
                 <button class="delete-btn"><i class="fa-solid fa-xmark"></i></button>
             </div>
         `);
@@ -2870,7 +2869,7 @@ function bindPanelEvents(panelEl) {
         bindAffectionInputs(editor);
     });
     
-    // 添加待办事项行
+    // Thêm hàng việc cần làm
     panelEl.querySelector('.horae-btn-add-agenda-row')?.addEventListener('click', () => {
         const editor = panelEl.querySelector('.horae-agenda-editor');
         const emptyHint = editor.querySelector('.horae-empty-hint');
@@ -2878,47 +2877,47 @@ function bindPanelEvents(panelEl) {
         
         editor.insertAdjacentHTML('beforeend', `
             <div class="horae-editor-row horae-agenda-edit-row">
-                <input type="text" class="agenda-date" style="flex:0 0 90px;max-width:90px;" value="" placeholder="日期">
-                <input type="text" class="agenda-text" style="flex:1 1 0;min-width:0;" value="" placeholder="待办内容（相对时间请标注绝对日期）">
+                <input type="text" class="agenda-date" style="flex:0 0 90px;max-width:90px;" value="" placeholder="Ngày">
+                <input type="text" class="agenda-text" style="flex:1 1 0;min-width:0;" value="" placeholder="Nội dung cần làm (thời gian tương đối vui lòng ghi chú ngày tuyệt đối)">
                 <button class="delete-btn"><i class="fa-solid fa-xmark"></i></button>
             </div>
         `);
         bindDeleteButtons(editor);
     });
     
-    // 绑定好感度输入联动
+    // Ràng buộc liên kết đầu vào độ hảo cảm
     bindAffectionInputs(panelEl.querySelector('.horae-affection-editor'));
     
-    // 绑定现有删除按钮
+    // Ràng buộc nút xóa hiện có
     bindDeleteButtons(panelEl);
     
-    // 快速解析按钮（不消耗API）
+    // Nút phân tích nhanh (không tốn API)
     panelEl.querySelector('.horae-btn-quick-scan')?.addEventListener('click', async () => {
         const chat = horaeManager.getChat();
         const message = chat[messageId];
         if (!message) {
-            showToast('无法获取消息内容', 'error');
+            showToast('Không thể lấy nội dung tin nhắn', 'error');
             return;
         }
         
-        // 先尝试解析标准标签
+        // Thử phân tích thẻ chuẩn trước
         let parsed = horaeManager.parseHoraeTag(message.mes);
         
-        // 如果没有标签，尝试宽松解析
+        // Nếu không có thẻ, thử phân tích lỏng lẻo
         if (!parsed) {
             parsed = horaeManager.parseLooseFormat(message.mes);
         }
         
         if (parsed) {
-            // 获取现有元数据并合并
+            // Lấy meta hiện có và hợp nhất
             const existingMeta = horaeManager.getMessageMeta(messageId) || createEmptyMeta();
             const newMeta = horaeManager.mergeParsedToMeta(existingMeta, parsed);
-            // 处理表格更新
+            // Xử lý cập nhật bảng
             if (newMeta._tableUpdates) {
                 horaeManager.applyTableUpdates(newMeta._tableUpdates);
                 delete newMeta._tableUpdates;
             }
-            // 处理已完成待办
+            // Xử lý việc cần làm đã hoàn thành
             if (parsed.deletedAgenda && parsed.deletedAgenda.length > 0) {
                 horaeManager.removeCompletedAgenda(parsed.deletedAgenda);
             }
@@ -2932,28 +2931,28 @@ function bindPanelEvents(panelEl) {
             
             getContext().saveChat();
             refreshAllDisplays();
-            showToast('快速解析完成！', 'success');
+            showToast('Phân tích nhanh hoàn tất!', 'success');
         } else {
-            showToast('未能从文本中提取到格式化数据，请尝试AI分析', 'warning');
+            showToast('Không thể trích xuất dữ liệu định dạng từ văn bản, vui lòng thử AI phân tích', 'warning');
         }
     });
     
-    // AI分析按钮（消耗API）
+    // Nút AI phân tích (tốn API)
     panelEl.querySelector('.horae-btn-ai-analyze')?.addEventListener('click', async () => {
         const chat = horaeManager.getChat();
         const message = chat[messageId];
         if (!message) {
-            showToast('无法获取消息内容', 'error');
+            showToast('Không thể lấy nội dung tin nhắn', 'error');
             return;
         }
         
         const btn = panelEl.querySelector('.horae-btn-ai-analyze');
         const originalText = btn.innerHTML;
-        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 分析中...';
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang phân tích...';
         btn.disabled = true;
         
         try {
-            // 调用AI分析
+            // Gọi AI phân tích
             const result = await analyzeMessageWithAI(message.mes);
             
             if (result) {
@@ -2963,7 +2962,7 @@ function bindPanelEvents(panelEl) {
                     horaeManager.applyTableUpdates(newMeta._tableUpdates);
                     delete newMeta._tableUpdates;
                 }
-                // 处理已完成待办
+                // Xử lý việc cần làm đã hoàn thành
                 if (result.deletedAgenda && result.deletedAgenda.length > 0) {
                     horaeManager.removeCompletedAgenda(result.deletedAgenda);
                 }
@@ -2977,13 +2976,13 @@ function bindPanelEvents(panelEl) {
                 
                 getContext().saveChat();
                 refreshAllDisplays();
-                showToast('AI分析完成！', 'success');
+                showToast('AI phân tích hoàn tất!', 'success');
             } else {
-                showToast('AI分析未返回有效数据', 'warning');
+                showToast('AI phân tích không trả về dữ liệu hợp lệ', 'warning');
             }
         } catch (error) {
-            console.error('[Horae] AI分析失败:', error);
-            showToast('AI分析失败: ' + error.message, 'error');
+            console.error('[Horae] AI phân tích thất bại:', error);
+            showToast('AI phân tích thất bại: ' + error.message, 'error');
         } finally {
             btn.innerHTML = originalText;
             btn.disabled = false;
@@ -2992,7 +2991,7 @@ function bindPanelEvents(panelEl) {
 }
 
 /**
- * 绑定删除按钮事件
+ * Ràng buộc sự kiện nút xóa
  */
 function bindDeleteButtons(container) {
     container.querySelectorAll('.delete-btn').forEach(btn => {
@@ -3001,7 +3000,7 @@ function bindDeleteButtons(container) {
 }
 
 /**
- * 绑定好感度输入框联动
+ * Ràng buộc liên kết ô nhập độ hảo cảm
  */
 function bindAffectionInputs(container) {
     if (!container) return;
@@ -3025,17 +3024,17 @@ function bindAffectionInputs(container) {
     });
 }
 
-/** 重新扫描消息并更新面板（完全替换） */
+/** Quét lại tin nhắn và cập nhật bảng điều khiển (thay thế hoàn toàn) */
 function rescanMessageMeta(messageId, panelEl) {
-    // 从DOM获取最新的消息内容（用户可能已编辑）
+    // Lấy nội dung tin nhắn mới nhất từ DOM (người dùng có thể đã chỉnh sửa)
     const messageEl = panelEl.closest('.mes');
     if (!messageEl) {
-        showToast('无法找到消息元素', 'error');
+        showToast('Không tìm thấy phần tử tin nhắn', 'error');
         return;
     }
     
-    // 获取文本内容（包括隐藏的horae标签）
-    // 先尝试从chat数组获取最新内容
+    // Lấy nội dung văn bản (bao gồm cả thẻ horae bị ẩn)
+    // Thử lấy nội dung mới nhất từ mảng chat trước
     const context = window.SillyTavern?.getContext?.() || getContext?.();
     let messageContent = '';
     
@@ -3043,7 +3042,7 @@ function rescanMessageMeta(messageId, panelEl) {
         messageContent = context.chat[messageId].mes;
     }
     
-    // 如果chat中没有或为空，从DOM获取
+    // Nếu trong chat không có hoặc rỗng, lấy từ DOM
     if (!messageContent) {
         const mesTextEl = messageEl.querySelector('.mes_text');
         if (mesTextEl) {
@@ -3052,14 +3051,14 @@ function rescanMessageMeta(messageId, panelEl) {
     }
     
     if (!messageContent) {
-        showToast('无法获取消息内容', 'error');
+        showToast('Không thể lấy nội dung tin nhắn', 'error');
         return;
     }
     
     const parsed = horaeManager.parseHoraeTag(messageContent);
     
     if (parsed) {
-        // 完全替换（不合并）
+        // Thay thế hoàn toàn (không hợp nhất)
         const existingMeta = horaeManager.getMessageMeta(messageId);
         const newMeta = createEmptyMeta();
         
@@ -3068,24 +3067,24 @@ function rescanMessageMeta(messageId, panelEl) {
         newMeta.costumes = parsed.costumes || {};
         newMeta.items = parsed.items || {};
         newMeta.deletedItems = parsed.deletedItems || [];
-        // 兼容新旧事件格式
+        // Tương thích định dạng sự kiện cũ và mới
         newMeta.events = parsed.events || (parsed.event ? [parsed.event] : []);
         newMeta.affection = parsed.affection || {};
         newMeta.agenda = parsed.agenda || [];
         
-        // 只保留原有的NPC数据（如果新解析中没有）
+        // Chỉ giữ lại dữ liệu NPC cũ (nếu trong lần phân tích mới không có)
         if (parsed.npcs && Object.keys(parsed.npcs).length > 0) {
             newMeta.npcs = parsed.npcs;
         } else if (existingMeta?.npcs) {
             newMeta.npcs = existingMeta.npcs;
         }
         
-        // 无新agenda则保留旧数据
+        // Không có agenda mới thì giữ dữ liệu cũ
         if (newMeta.agenda.length === 0 && existingMeta?.agenda?.length > 0) {
             newMeta.agenda = existingMeta.agenda;
         }
         
-        // 处理已完成待办
+        // Xử lý việc cần làm đã hoàn thành
         if (parsed.deletedAgenda && parsed.deletedAgenda.length > 0) {
             horaeManager.removeCompletedAgenda(parsed.deletedAgenda);
         }
@@ -3096,12 +3095,12 @@ function rescanMessageMeta(messageId, panelEl) {
         panelEl.remove();
         addMessagePanel(messageEl, messageId);
         
-        // 同时刷新主显示
+        // Đồng thời làm mới hiển thị chính
         refreshAllDisplays();
         
-        showToast('已重新扫描并更新', 'success');
+        showToast('Đã quét lại và cập nhật', 'success');
     } else {
-        // 无标签，清空数据（保留NPC）
+        // Không có thẻ, xóa dữ liệu (giữ lại NPC)
         const existingMeta = horaeManager.getMessageMeta(messageId);
         const newMeta = createEmptyMeta();
         if (existingMeta?.npcs) {
@@ -3113,24 +3112,24 @@ function rescanMessageMeta(messageId, panelEl) {
         addMessagePanel(messageEl, messageId);
         refreshAllDisplays();
         
-        showToast('未找到Horae标签，已清空数据', 'warning');
+        showToast('Không tìm thấy thẻ Horae, đã xóa dữ liệu', 'warning');
     }
 }
 
 /**
- * 保存面板数据
+ * Lưu dữ liệu bảng điều khiển
  */
 function savePanelData(panelEl, messageId) {
-    // 获取现有的 meta，保留面板中没有编辑区的数据（如 NPC）
+    // Lấy meta hiện có, giữ lại dữ liệu không có vùng chỉnh sửa trong bảng (như NPC)
     const existingMeta = horaeManager.getMessageMeta(messageId);
     const meta = createEmptyMeta();
     
-    // 保留原有的 NPC 数据（因为面板中没有 NPC 编辑区）
+    // Giữ lại dữ liệu NPC cũ (vì trong bảng không có vùng chỉnh sửa NPC)
     if (existingMeta?.npcs) {
         meta.npcs = JSON.parse(JSON.stringify(existingMeta.npcs));
     }
     
-    // 分离日期时间
+    // Tách ngày giờ
     const datetimeVal = (panelEl.querySelector('.horae-input-datetime')?.value || '').trim();
     const clockMatch = datetimeVal.match(/\b(\d{1,2}:\d{2})\s*$/);
     if (clockMatch) {
@@ -3142,13 +3141,13 @@ function savePanelData(panelEl, messageId) {
     }
     meta.timestamp.absolute = new Date().toISOString();
     
-    // 场景
+    // Bối cảnh
     meta.scene.location = panelEl.querySelector('.horae-input-location')?.value || '';
     meta.scene.atmosphere = panelEl.querySelector('.horae-input-atmosphere')?.value || '';
     const charsInput = panelEl.querySelector('.horae-input-characters')?.value || '';
     meta.scene.characters_present = charsInput.split(/[,，]/).map(s => s.trim()).filter(Boolean);
     
-    // 服装
+    // Trang phục
     panelEl.querySelectorAll('.horae-costume-editor .horae-editor-row').forEach(row => {
         const inputs = row.querySelectorAll('input');
         if (inputs.length >= 2) {
@@ -3160,7 +3159,7 @@ function savePanelData(panelEl, messageId) {
         }
     });
     
-    // 物品配对处理
+    // Xử lý ghép đôi vật phẩm
     const itemMainRows = panelEl.querySelectorAll('.horae-items-editor .horae-item-row');
     const itemDescRows = panelEl.querySelectorAll('.horae-items-editor .horae-item-desc-row');
     const latestState = horaeManager.getLatestState();
@@ -3177,11 +3176,11 @@ function savePanelData(panelEl, messageId) {
         if (nameInput) {
             const name = nameInput.value.trim();
             if (name) {
-                // 从物品栏获取已保存的importance，底部栏不再编辑分类
+                // Lấy importance đã lưu từ túi đồ, thanh dưới cùng không chỉnh sửa phân loại
                 const existingImportance = existingItems[name]?.importance || existingMeta?.items?.[name]?.importance || '';
                 meta.items[name] = {
                     icon: iconInput?.value.trim() || null,
-                    importance: existingImportance,  // 保留物品栏的分类
+                    importance: existingImportance,  // Giữ lại phân loại của túi đồ
                     holder: holderInput?.value.trim() || null,
                     location: locationInput?.value.trim() || '',
                     description: descInput?.value.trim() || ''
@@ -3190,7 +3189,7 @@ function savePanelData(panelEl, messageId) {
         }
     });
     
-    // 事件
+    // Sự kiện
     const eventLevel = panelEl.querySelector('.horae-input-event-level')?.value;
     const eventSummary = panelEl.querySelector('.horae-input-event-summary')?.value;
     if (eventLevel && eventSummary) {
@@ -3214,7 +3213,7 @@ function savePanelData(panelEl, messageId) {
         }
     });
     
-    // 兼容旧格式
+    // Tương thích định dạng cũ
     panelEl.querySelectorAll('.horae-affection-editor .horae-editor-row:not(.horae-affection-row)').forEach(row => {
         const inputs = row.querySelectorAll('input');
         if (inputs.length >= 2) {
@@ -3233,7 +3232,7 @@ function savePanelData(panelEl, messageId) {
         const date = dateInput?.value?.trim() || '';
         const text = textInput?.value?.trim() || '';
         if (text) {
-            // 保留原 source
+            // Giữ lại source gốc
             const existingAgendaItem = existingMeta?.agenda?.find(a => a.text === text);
             const source = existingAgendaItem?.source || 'user';
             agendaItems.push({ date, text, source, done: false });
@@ -3242,21 +3241,21 @@ function savePanelData(panelEl, messageId) {
     if (agendaItems.length > 0) {
         meta.agenda = agendaItems;
     } else if (existingMeta?.agenda?.length > 0) {
-        // 无编辑行时保留原有待办
+        // Không có hàng chỉnh sửa thì giữ nguyên việc cần làm cũ
         meta.agenda = existingMeta.agenda;
     }
     
     horaeManager.setMessageMeta(messageId, meta);
     
-    // 同步写入正文标签
+    // Đồng bộ ghi vào thẻ văn bản chính
     injectHoraeTagToMessage(messageId, meta);
     
     getContext().saveChat();
     
-    showToast('保存成功！', 'success');
+    showToast('Lưu thành công!', 'success');
     refreshAllDisplays();
     
-    // 更新面板摘要
+    // Cập nhật tóm tắt bảng điều khiển
     const summaryTime = panelEl.querySelector('.horae-summary-time');
     const summaryEvent = panelEl.querySelector('.horae-summary-event');
     const summaryChars = panelEl.querySelector('.horae-summary-chars');
@@ -3274,14 +3273,14 @@ function savePanelData(panelEl, messageId) {
         }
     }
     if (summaryEvent) {
-        summaryEvent.textContent = meta.event?.summary || '无特殊事件';
+        summaryEvent.textContent = meta.event?.summary || 'Không có sự kiện đặc biệt';
     }
     if (summaryChars) {
-        summaryChars.textContent = `${meta.scene.characters_present.length}人在场`;
+        summaryChars.textContent = `${meta.scene.characters_present.length} người có mặt`;
     }
 }
 
-/** 构建 <horae> 标签字符串 */
+/** Xây dựng chuỗi thẻ <horae> */
 function buildHoraeTagFromMeta(meta) {
     const lines = [];
     
@@ -3345,7 +3344,7 @@ function buildHoraeTagFromMeta(meta) {
         }
     }
     
-    // npcs（使用新格式：npc:名|外貌=性格@关系~扩展字段）
+    // npcs（Định dạng mới：npc:Tên|Ngoại hình=Tính cách@Quan hệ~Mở rộng）
     if (meta.npcs) {
         for (const [name, info] of Object.entries(meta.npcs)) {
             if (!name) continue;
@@ -3382,7 +3381,7 @@ function buildHoraeTagFromMeta(meta) {
     return `<horae>\n${lines.join('\n')}\n</horae>`;
 }
 
-/** 构建 <horaeevent> 标签字符串 */
+/** Xây dựng chuỗi thẻ <horaeevent> */
 function buildHoraeEventTagFromMeta(meta) {
     const events = meta.events || (meta.event ? [meta.event] : []);
     if (events.length === 0) return '';
@@ -3395,7 +3394,7 @@ function buildHoraeEventTagFromMeta(meta) {
     return `<horaeevent>\n${lines.join('\n')}\n</horaeevent>`;
 }
 
-/** 同步注入正文标签 */
+/** Đồng bộ ghi thẻ vào văn bản chính */
 function injectHoraeTagToMessage(messageId, meta) {
     try {
         const chat = horaeManager.getChat();
@@ -3404,7 +3403,7 @@ function injectHoraeTagToMessage(messageId, meta) {
         const message = chat[messageId];
         let mes = message.mes;
         
-        // === 处理 <horae> 标签 ===
+        // === Xử lý thẻ <horae> ===
         const newHoraeTag = buildHoraeTagFromMeta(meta);
         const hasHoraeTag = /<horae>[\s\S]*?<\/horae>/i.test(mes);
         
@@ -3416,7 +3415,7 @@ function injectHoraeTagToMessage(messageId, meta) {
             mes = mes.trimEnd() + '\n\n' + newHoraeTag;
         }
         
-        // === 处理 <horaeevent> 标签 ===
+        // === Xử lý thẻ <horaeevent> ===
         const newEventTag = buildHoraeEventTagFromMeta(meta);
         const hasEventTag = /<horaeevent>[\s\S]*?<\/horaeevent>/i.test(mes);
         
@@ -3429,25 +3428,25 @@ function injectHoraeTagToMessage(messageId, meta) {
         }
         
         message.mes = mes;
-        console.log(`[Horae] 已同步写入消息 #${messageId} 的标签`);
+        console.log(`[Horae] Đã đồng bộ ghi thẻ vào tin nhắn #${messageId}`);
     } catch (error) {
-        console.error(`[Horae] 写入标签失败:`, error);
+        console.error(`[Horae] Ghi thẻ thất bại:`, error);
     }
 }
 
 // ============================================
-// 抽屉面板交互
+// Tương tác bảng ngăn kéo
 // ============================================
 
 /**
- * 打开/关闭抽屉（旧版兼容模式）
+ * Mở/Đóng ngăn kéo (Chế độ tương thích cũ)
  */
 function openDrawerLegacy() {
     const drawerIcon = $('#horae_drawer_icon');
     const drawerContent = $('#horae_drawer_content');
     
     if (drawerIcon.hasClass('closedIcon')) {
-        // 关闭其他抽屉
+        // Đóng các ngăn kéo khác
         $('.openDrawer').not('#horae_drawer_content').not('.pinnedOpen').addClass('resizing').each((_, el) => {
             slideToggle(el, {
                 ...getSlideToggleOptions(),
@@ -3480,23 +3479,23 @@ function openDrawerLegacy() {
 }
 
 /**
- * 初始化抽屉
+ * Khởi tạo ngăn kéo
  */
 async function initDrawer() {
     const toggle = $('#horae_drawer .drawer-toggle');
     
     if (isNewNavbarVersion()) {
         toggle.on('click', doNavbarIconClick);
-        console.log(`[Horae] 使用新版导航栏模式`);
+        console.log(`[Horae] Sử dụng chế độ thanh điều hướng mới`);
     } else {
         $('#horae_drawer_content').attr('data-slide-toggle', 'hidden').css('display', 'none');
         toggle.on('click', openDrawerLegacy);
-        console.log(`[Horae] 使用旧版抽屉模式`);
+        console.log(`[Horae] Sử dụng chế độ ngăn kéo cũ`);
     }
 }
 
 /**
- * 初始化标签页切换
+ * Khởi tạo chuyển tab
  */
 function initTabs() {
     $('.horae-tab').on('click', function() {
@@ -3527,11 +3526,11 @@ function initTabs() {
 }
 
 // ============================================
-// 清理无主物品功能
+// Chức năng dọn dẹp vật phẩm vô chủ
 // ============================================
 
 /**
- * 初始化设置页事件
+ * Khởi tạo sự kiện trang cài đặt
  */
 function initSettingsEvents() {
     $('#horae-setting-enabled').on('change', function() {
@@ -3588,7 +3587,7 @@ function initSettingsEvents() {
     
     $('#horae-btn-items-refresh').on('click', () => {
         updateItemsDisplay();
-        showToast('物品列表已刷新', 'info');
+        showToast('Danh sách vật phẩm đã được làm mới', 'info');
     });
     
     $('#horae-setting-send-timeline').on('change', function() {
@@ -3619,7 +3618,7 @@ function initSettingsEvents() {
         const file = e.target.files[0];
         if (file) {
             importTable(file);
-            e.target.value = ''; // 清空以便可以再次选择同一文件
+            e.target.value = ''; // Xóa đi để có thể chọn lại cùng một tệp
         }
     });
     renderCustomTablesList();
@@ -3630,7 +3629,7 @@ function initSettingsEvents() {
 }
 
 /**
- * 同步设置到UI
+ * Đồng bộ cài đặt vào UI
  */
 function syncSettingsToUI() {
     $('#horae-setting-enabled').prop('checked', settings.enabled);
@@ -3645,22 +3644,22 @@ function syncSettingsToUI() {
 }
 
 // ============================================
-// 核心功能
+// Chức năng cốt lõi
 // ============================================
 
 /**
- * 带进度显示的历史扫描
+ * Quét lịch sử có hiển thị tiến trình
  */
 async function scanHistoryWithProgress() {
     const overlay = document.createElement('div');
     overlay.className = 'horae-progress-overlay';
     overlay.innerHTML = `
         <div class="horae-progress-container">
-            <div class="horae-progress-title">正在扫描历史记录...</div>
+            <div class="horae-progress-title">Đang quét lịch sử...</div>
             <div class="horae-progress-bar">
                 <div class="horae-progress-fill" style="width: 0%"></div>
             </div>
-            <div class="horae-progress-text">准备中...</div>
+            <div class="horae-progress-text">Đang chuẩn bị...</div>
         </div>
     `;
     document.body.appendChild(overlay);
@@ -3672,28 +3671,28 @@ async function scanHistoryWithProgress() {
         const result = await horaeManager.scanAndInjectHistory(
             (percent, current, total) => {
                 fillEl.style.width = `${percent}%`;
-                textEl.textContent = `处理中... ${current}/${total}`;
+                textEl.textContent = `Đang xử lý... ${current}/${total}`;
             },
-            null // 不使用AI分析，只解析已有标签
+            null // Không sử dụng AI phân tích, chỉ phân tích thẻ có sẵn
         );
         
         horaeManager.rebuildTableData();
         
         await getContext().saveChat();
         
-        showToast(`扫描完成！处理 ${result.processed} 条，跳过 ${result.skipped} 条`, 'success');
+        showToast(`Quét hoàn tất! Đã xử lý ${result.processed} mục, bỏ qua ${result.skipped} mục`, 'success');
         refreshAllDisplays();
         renderCustomTablesList();
     } catch (error) {
-        console.error('[Horae] 扫描失败:', error);
-        showToast('扫描失败: ' + error.message, 'error');
+        console.error('[Horae] Quét thất bại:', error);
+        showToast('Quét thất bại: ' + error.message, 'error');
     } finally {
         overlay.remove();
     }
 }
 
 /**
- * 导出数据
+ * Xuất dữ liệu
  */
 function exportData() {
     const chat = horaeManager.getChat();
@@ -3714,11 +3713,11 @@ function exportData() {
     a.click();
     URL.revokeObjectURL(url);
     
-    showToast('数据已导出', 'success');
+    showToast('Dữ liệu đã được xuất', 'success');
 }
 
 /**
- * 导入数据
+ * Nhập dữ liệu
  */
 function importData() {
     const input = document.createElement('input');
@@ -3733,7 +3732,7 @@ function importData() {
             const importObj = JSON.parse(text);
             
             if (!importObj.data || !Array.isArray(importObj.data)) {
-                throw new Error('无效的数据格式');
+                throw new Error('Định dạng dữ liệu không hợp lệ');
             }
             
             const chat = horaeManager.getChat();
@@ -3747,21 +3746,21 @@ function importData() {
             }
             
             await getContext().saveChat();
-            showToast(`成功导入 ${imported} 条记录`, 'success');
+            showToast(`Đã nhập thành công ${imported} bản ghi`, 'success');
             refreshAllDisplays();
         } catch (error) {
-            console.error('[Horae] 导入失败:', error);
-            showToast('导入失败: ' + error.message, 'error');
+            console.error('[Horae] Nhập thất bại:', error);
+            showToast('Nhập thất bại: ' + error.message, 'error');
         }
     };
     input.click();
 }
 
 /**
- * 清除所有数据
+ * Xóa tất cả dữ liệu
  */
 async function clearAllData() {
-    if (!confirm('确定要清除所有 Horae 元数据吗？此操作不可恢复！')) {
+    if (!confirm('Bạn có chắc chắn muốn xóa tất cả siêu dữ liệu Horae không? Thao tác này không thể khôi phục!')) {
         return;
     }
     
@@ -3771,50 +3770,50 @@ async function clearAllData() {
     }
     
     await getContext().saveChat();
-    showToast('所有数据已清除', 'warning');
+    showToast('Tất cả dữ liệu đã bị xóa', 'warning');
     refreshAllDisplays();
 }
 
-/** 使用AI分析消息内容 */
+/** Sử dụng AI phân tích nội dung tin nhắn */
 async function analyzeMessageWithAI(messageContent) {
     const context = getContext();
     
-    const userName = context?.name1 || '主角';
+    const userName = context?.name1 || 'Nhân vật chính';
     
-    const analysisPrompt = `请分析以下文本，提取关键信息并以指定格式输出。核心原则：只提取文本中明确提到的信息，没有的字段不写，禁止编造。
+    const analysisPrompt = `Vui lòng phân tích văn bản sau, trích xuất thông tin chính và xuất ra theo định dạng được chỉ định. Nguyên tắc cốt lõi: Chỉ trích xuất thông tin được đề cập rõ ràng trong văn bản, trường nào không có thì không ghi, cấm bịa đặt.
 
-【文本内容】
+【Nội dung văn bản】
 ${messageContent}
 
-【输出格式】
+【Định dạng đầu ra】
 <horae>
-time:日期 时间（必填，如 2026/2/4 15:00 或 霜降月第一日 19:50）
-location:当前地点（必填）
-atmosphere:氛围
-characters:在场角色,逗号分隔（必填）
-costume:角色名=完整服装描述（必填，每人一行，禁止分号合并）
-item:emoji物品名(数量)|描述=持有者@精确位置（仅新获得或有变化的物品）
-item!:emoji物品名(数量)|描述=持有者@精确位置（重要物品，描述必填）
-item!!:emoji物品名(数量)|描述=持有者@精确位置（关键道具，描述必须详细）
-item-:物品名（消耗/丢失的物品）
-affection:角色名=好感度数值（仅NPC对${userName}的好感，禁止记录${userName}自己，禁止数值后加注解）
-npc:角色名|外貌=性格@与${userName}的关系~性别:男或女~年龄:数字~种族:种族名~职业:职业名
-agenda:订立日期|待办内容（仅在出现新约定/计划/伏笔时写入，相对时间须括号标注绝对日期）
-agenda-:内容关键词（待办已完成/失效/取消时写入，系统自动移除匹配的待办）
+time:Ngày Giờ (Bắt buộc, ví dụ 2026/2/4 15:00 hoặc Ngày đầu tiên tháng Sương giá 19:50)
+location:Địa điểm hiện tại (Bắt buộc)
+atmosphere:Bầu không khí
+characters:Nhân vật có mặt, phân cách bằng dấu phẩy (Bắt buộc)
+costume:Tên nhân vật=Mô tả trang phục đầy đủ (Bắt buộc, mỗi người một dòng, cấm gộp bằng dấu chấm phẩy)
+item:emojiTên vật phẩm(Số lượng)|Mô tả=Người nắm giữ@Vị trí chính xác (Chỉ khi mới nhận được hoặc có thay đổi vật phẩm)
+item!:emojiTên vật phẩm(Số lượng)|Mô tả=Người nắm giữ@Vị trí chính xác (Vật phẩm quan trọng, mô tả là bắt buộc)
+item!!:emojiTên vật phẩm(Số lượng)|Mô tả=Người nắm giữ@Vị trí chính xác (Đạo cụ then chốt, mô tả phải chi tiết)
+item-:Tên vật phẩm (Vật phẩm tiêu hao/bị mất)
+affection:Tên nhân vật=Giá trị độ hảo cảm (Chỉ NPC đối với ${userName}, cấm ghi ${userName} đối với chính mình, cấm thêm chú thích sau giá trị số)
+npc:Tên nhân vật|Ngoại hình=Tính cách@Quan hệ với ${userName}~Giới tính:Nam hoặc Nữ~Tuổi:Số~Chủng tộc:Tên chủng tộc~Nghề nghiệp:Tên nghề nghiệp
+agenda:Ngày lập|Nội dung cần làm (Chỉ ghi khi xuất hiện giao ước mới/kế hoạch/phục bút, thời gian tương đối phải ghi chú ngày tuyệt đối trong ngoặc)
+agenda-:Từ khóa nội dung (Ghi khi việc cần làm đã hoàn thành/hết hiệu lực/bị hủy, hệ thống tự động xóa mục khớp)
 </horae>
 <horaeevent>
-event:重要程度|事件简述（30-50字，一般/重要/关键）
+event:Mức độ quan trọng|Tóm tắt sự kiện (30-50 chữ, Bình thường/Quan trọng/Then chốt)
 </horaeevent>
 
-【触发条件】只在满足条件时才输出对应字段：
-· 物品：仅新获得、数量/归属/位置改变、消耗丢失时写。无变化不写。单件不写(1)。emoji前缀如🔑🍞。
-· NPC：首次出场必须完整（含~性别/年龄/种族/职业）。之后仅变化的字段写，无变化不写。
-  分隔符：| 分名字，= 分外貌和性格，@ 分关系，~ 分扩展字段
-· 好感度：首次按关系判定（陌生0-20/熟人30-50/朋友50-70），之后仅变化时写。
-· 待办：仅出现新约定/计划/伏笔时写。已完成/失效的待办用 agenda-: 移除。
-  新增：agenda:2026/02/10|艾伦邀请${userName}情人节晚上约会(2026/02/14 18:00)
-  完成：agenda-:艾伦邀请${userName}情人节晚上约会
-· event：放在<horaeevent>内，不放在<horae>内。`;
+【Điều kiện kích hoạt】Chỉ xuất ra trường tương ứng khi thỏa mãn điều kiện:
+· Vật phẩm: Chỉ ghi khi mới nhận được, thay đổi số lượng/quyền sở hữu/vị trí, tiêu hao hoặc bị mất. Không thay đổi không ghi. Đơn chiếc không ghi (1). Tiền tố emoji ví dụ 🔑🍞.
+· NPC: Lần đầu xuất hiện bắt buộc phải đầy đủ (bao gồm ~Giới tính/Tuổi/Chủng tộc/Nghề nghiệp). Sau đó chỉ ghi trường thay đổi, không thay đổi không ghi.
+  Dấu phân cách: | phân tên, = phân ngoại hình và tính cách, @ phân quan hệ, ~ phân trường mở rộng
+· Độ hảo cảm: Lần đầu xác định theo quan hệ (Người lạ 0-20/Người quen 30-50/Bạn bè 50-70), sau đó chỉ ghi khi thay đổi.
+· Việc cần làm: Chỉ ghi khi xuất hiện giao ước mới/kế hoạch/phục bút. Dùng agenda-: để xóa việc đã hoàn thành/hết hiệu lực.
+  Thêm mới: agenda:2026/02/10|Alan mời ${userName} hẹn hò tối Valentine (2026/02/14 18:00)
+  Hoàn thành: agenda-:Alan mời ${userName} hẹn hò tối Valentine
+· event: Đặt trong <horaeevent>, không đặt trong <horae>.`;
 
     try {
         const response = await context.generateRaw(analysisPrompt, null, false, false);
@@ -3824,7 +3823,7 @@ event:重要程度|事件简述（30-50字，一般/重要/关键）
             return parsed;
         }
     } catch (error) {
-        console.error('[Horae] AI分析调用失败:', error);
+        console.error('[Horae] Gọi AI phân tích thất bại:', error);
         throw error;
     }
     
@@ -3832,11 +3831,11 @@ event:重要程度|事件简述（30-50字，一般/重要/关键）
 }
 
 // ============================================
-// 事件监听
+// Lắng nghe sự kiện
 // ============================================
 
 /**
- * AI回复接收时触发
+ * Kích hoạt khi nhận phản hồi từ AI
  */
 async function onMessageReceived(messageId) {
     if (!settings.enabled || !settings.autoParse) return;
@@ -3846,12 +3845,12 @@ async function onMessageReceived(messageId) {
     
     if (!message || message.is_user) return;
     
-    console.log(`[Horae] 处理新消息 #${messageId}`);
+    console.log(`[Horae] Xử lý tin nhắn mới #${messageId}`);
     
     const hasTag = horaeManager.processAIResponse(messageId, message.mes);
     
     if (hasTag) {
-        console.log(`[Horae] 从消息 #${messageId} 解析到元数据`);
+        console.log(`[Horae] Đã phân tích được siêu dữ liệu từ tin nhắn #${messageId}`);
     }
     
     getContext().saveChat();
@@ -3867,12 +3866,12 @@ async function onMessageReceived(messageId) {
 }
 
 /**
- * 消息删除时触发 — 重建表格数据
+ * Kích hoạt khi tin nhắn bị xóa — Tái tạo dữ liệu bảng
  */
 function onMessageDeleted() {
     if (!settings.enabled) return;
     
-    console.log('[Horae] 检测到消息删除，重建表格数据...');
+    console.log('[Horae] Phát hiện tin nhắn bị xóa, tái tạo dữ liệu bảng...');
     horaeManager.rebuildTableData();
     getContext().saveChat();
     
@@ -3881,7 +3880,7 @@ function onMessageDeleted() {
 }
 
 /**
- * 消息编辑时触发 — 重新解析该消息并重建表格
+ * Kích hoạt khi tin nhắn được chỉnh sửa — Phân tích lại tin nhắn đó và tái tạo bảng
  */
 function onMessageEdited(messageId) {
     if (!settings.enabled) return;
@@ -3890,9 +3889,9 @@ function onMessageEdited(messageId) {
     const message = chat[messageId];
     if (!message || message.is_user) return;
     
-    console.log(`[Horae] 检测到消息 #${messageId} 编辑，重新解析...`);
+    console.log(`[Horae] Phát hiện tin nhắn #${messageId} được chỉnh sửa, phân tích lại...`);
     
-    // 重新解析这条消息
+    // Phân tích lại tin nhắn này
     horaeManager.processAIResponse(messageId, message.mes);
     
     horaeManager.rebuildTableData();
@@ -3903,7 +3902,7 @@ function onMessageEdited(messageId) {
 }
 
 /**
- * 准备注入上下文
+ * Chuẩn bị tiêm context
  */
 async function onPromptReady(eventData) {
     if (!settings.enabled || !settings.injectContext) return;
@@ -3915,7 +3914,7 @@ async function onPromptReady(eventData) {
         
         const combinedPrompt = `${prompt}\n${systemAddition}`;
         
-        // 注入到上下文
+        // Tiêm vào context
         const position = settings.injectionPosition;
         if (position === 0) {
             eventData.chat.push({ role: 'system', content: combinedPrompt });
@@ -3923,14 +3922,14 @@ async function onPromptReady(eventData) {
             eventData.chat.splice(-position, 0, { role: 'system', content: combinedPrompt });
         }
         
-        console.log(`[Horae] 已注入上下文，位置: -${position}`);
+        console.log(`[Horae] Đã tiêm context, vị trí: -${position}`);
     } catch (error) {
-        console.error('[Horae] 注入上下文失败:', error);
+        console.error('[Horae] Tiêm context thất bại:', error);
     }
 }
 
 /**
- * 聊天切换时触发
+ * Kích hoạt khi chuyển đổi cuộc trò chuyện
  */
 async function onChatChanged() {
     if (!settings.enabled) return;
@@ -3955,7 +3954,7 @@ async function onChatChanged() {
 }
 
 /**
- * 消息渲染时触发
+ * Kích hoạt khi render tin nhắn
  */
 function onMessageRendered(messageId) {
     if (!settings.enabled || !settings.showMessagePanel) return;
@@ -3973,11 +3972,11 @@ function onMessageRendered(messageId) {
 }
 
 // ============================================
-// 初始化
+// Khởi tạo
 // ============================================
 
 jQuery(async () => {
-    console.log(`[Horae] 开始加载 v${VERSION}...`);
+    console.log(`[Horae] Bắt đầu tải v${VERSION}...`);
 
     await initNavbarFunction();
     loadSettings();
@@ -3996,12 +3995,12 @@ jQuery(async () => {
     eventSource.on(event_types.CHAT_COMPLETION_PROMPT_READY, onPromptReady);
     eventSource.on(event_types.CHAT_CHANGED, onChatChanged);
     eventSource.on(event_types.MESSAGE_RENDERED, onMessageRendered);
-    eventSource.on(event_types.MESSAGE_SWIPED, onMessageRendered); // 修复滑动分页后面板消失
-    eventSource.on(event_types.MESSAGE_DELETED, onMessageDeleted); // 消息删除时重建表格数据
-    eventSource.on(event_types.MESSAGE_EDITED, onMessageEdited);   // 消息编辑时重建表格数据
+    eventSource.on(event_types.MESSAGE_SWIPED, onMessageRendered); // Sửa lỗi bảng điều khiển biến mất sau khi vuốt đổi tin nhắn
+    eventSource.on(event_types.MESSAGE_DELETED, onMessageDeleted); // Tái tạo dữ liệu bảng khi xóa tin nhắn
+    eventSource.on(event_types.MESSAGE_EDITED, onMessageEdited);   // Tái tạo dữ liệu bảng khi sửa tin nhắn
     
     refreshAllDisplays();
     
     isInitialized = true;
-    console.log(`[Horae] v${VERSION} 加载完成！作者: SenriYuki`);
+    console.log(`[Horae] v${VERSION} Tải hoàn tất! Tác giả: SenriYuki`);
 });
