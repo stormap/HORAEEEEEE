@@ -1,10 +1,10 @@
 /** Horae - 时间工具函数 */
 
 /** 中文周几映射 */
-const WEEKDAY_NAMES = ['日', '一', '二', '三', '四', '五', '六'];
+const WEEKDAY_NAMES = ['CN', 'Hai', 'Ba', 'Tư', 'Năm', 'Sáu', 'Bảy'];
 
 /** 季节名称 */
-const SEASONS = ['冬季', '冬季', '春季', '春季', '春季', '夏季', '夏季', '夏季', '秋季', '秋季', '秋季', '冬季'];
+const SEASONS = ['Mùa đông', 'Mùa đông', 'Mùa xuân', 'Mùa xuân', 'Mùa xuân', 'Mùa hè', 'Mùa hè', 'Mùa hè', 'Mùa thu', 'Mùa thu', 'Mùa thu', 'Mùa đông'];
 
 /** 中文数字映射 */
 const CHINESE_NUMS = {
@@ -205,38 +205,38 @@ export function calculateRelativeTime(fromDate, toDate) {
 
 /** 格式化相对时间描述 */
 export function formatRelativeTime(days, options = {}) {
-    if (days === null || days === undefined) return '未知';
+    if (days === null || days === undefined) return 'Không rõ';
     
-    if (days === -999) return '较早';
-    if (days === -998) return '之后';
-    if (days === -997) return '之前';
+    if (days === -999) return 'Trước đó khá lâu';
+    if (days === -998) return 'Sau đó';
+    if (days === -997) return 'Trước đó';
     
-    // 近几天
-    if (days === 0) return '今天';
-    if (days === 1) return '昨天';
-    if (days === 2) return '前天';
-    if (days === 3) return '大前天';
-    if (days === -1) return '明天';
-    if (days === -2) return '后天';
-    if (days === -3) return '大后天';
+    // Vài ngày gần đây
+    if (days === 0) return 'Hôm nay';
+    if (days === 1) return 'Hôm qua';
+    if (days === 2) return 'Hôm kia';
+    if (days === 3) return '3 ngày trước';
+    if (days === -1) return 'Ngày mai';
+    if (days === -2) return 'Ngày kia';
+    if (days === -3) return '3 ngày nữa';
     
     const { fromDate, toDate } = options;
     
     if (days > 0) {
-        if (days < 7) return `${days}天前`;
+        if (days < 7) return `${days} ngày trước`;
         
-        // 上周几
+        // Thứ mấy tuần trước
         if (days >= 4 && days <= 13 && fromDate) {
             const weekday = fromDate.getDay();
-            return `上周${WEEKDAY_NAMES[weekday]}`;
+            return `Thứ ${WEEKDAY_NAMES[weekday]} tuần trước`;
         }
         
-        // 上个月
+        // Tháng trước
         if (days >= 20 && days < 60 && fromDate && toDate) {
             const fromMonth = fromDate.getMonth();
             const toMonth = toDate.getMonth();
             if (fromMonth !== toMonth) {
-                return `上个月${fromDate.getDate()}号`;
+                return `Ngày ${fromDate.getDate()} tháng trước`;
             }
         }
         
@@ -247,42 +247,42 @@ export function formatRelativeTime(days, options = {}) {
                 const fromMonth = fromDate.getMonth() + 1;
                 const fromDay = fromDate.getDate();
                 if (days < 730) {
-                    return `去年${fromMonth}月${fromDay}日`;
+                    return `Ngày ${fromDay} tháng ${fromMonth} năm ngoái`;
                 }
             }
         }
         
-        if (days < 14) return `${Math.ceil(days / 7)}周前`;
-        if (days < 60) return `${Math.round(days / 30)}个月前`;
-        if (days < 365) return `${Math.round(days / 30)}个月前`;
+        if (days < 14) return `${Math.ceil(days / 7)} tuần trước`;
+        if (days < 60) return `${Math.round(days / 30)} tháng trước`;
+        if (days < 365) return `${Math.round(days / 30)} tháng trước`;
         const years = Math.floor(days / 365);
         const remainMonths = Math.round((days % 365) / 30);
-        if (remainMonths > 0 && years < 5) return `${years}年${remainMonths}个月前`;
-        return `${years}年前`;
+        if (remainMonths > 0 && years < 5) return `${years} năm ${remainMonths} tháng trước`;
+        return `${years} năm trước`;
     } else {
         const absDays = Math.abs(days);
-        if (absDays < 7) return `${absDays}天后`;
+        if (absDays < 7) return `${absDays} ngày sau`;
         
         if (absDays >= 4 && absDays <= 13 && fromDate) {
             const weekday = fromDate.getDay();
-            return `下周${WEEKDAY_NAMES[weekday]}`;
+            return `Thứ ${WEEKDAY_NAMES[weekday]} tuần sau`;
         }
         
         if (absDays >= 20 && absDays < 60 && fromDate && toDate) {
             const fromMonth = fromDate.getMonth();
             const toMonth = toDate.getMonth();
             if (fromMonth !== toMonth) {
-                return `下个月${fromDate.getDate()}号`;
+                return `Ngày ${fromDate.getDate()} tháng sau`;
             }
         }
         
-        if (absDays < 14) return `${Math.ceil(absDays / 7)}周后`;
-        if (absDays < 60) return `${Math.round(absDays / 30)}个月后`;
-        if (absDays < 365) return `${Math.round(absDays / 30)}个月后`;
+        if (absDays < 14) return `${Math.ceil(absDays / 7)} tuần sau`;
+        if (absDays < 60) return `${Math.round(absDays / 30)} tháng sau`;
+        if (absDays < 365) return `${Math.round(absDays / 30)} tháng sau`;
         const years = Math.floor(absDays / 365);
         const remainMonths = Math.round((absDays % 365) / 30);
-        if (remainMonths > 0 && years < 5) return `${years}年${remainMonths}个月后`;
-        return `${years}年后`;
+        if (remainMonths > 0 && years < 5) return `${years} năm ${remainMonths} tháng sau`;
+        return `${years} năm sau`;
     }
 }
 
@@ -435,15 +435,16 @@ export function getTimeOfDay(timeStr) {
     }
     
     if (hour !== null) {
-        if (hour >= 0 && hour < 5) return '凌晨';
-        if (hour >= 5 && hour < 8) return '早上';
-        if (hour >= 8 && hour < 11) return '上午';
-        if (hour >= 11 && hour < 13) return '中午';
-        if (hour >= 13 && hour < 17) return '下午';
-        if (hour >= 17 && hour < 19) return '傍晚';
-        if (hour >= 19 && hour < 23) return '晚上';
-        return '深夜';
+        if (hour >= 0 && hour < 5) return 'Rạng sáng';
+        if (hour >= 5 && hour < 8) return 'Sáng sớm';
+        if (hour >= 8 && hour < 11) return 'Buổi sáng';
+        if (hour >= 11 && hour < 13) return 'Buổi trưa';
+        if (hour >= 13 && hour < 17) return 'Buổi chiều';
+        if (hour >= 17 && hour < 19) return 'Chập tối';
+        if (hour >= 19 && hour < 23) return 'Buổi tối';
+        return 'Đêm khuya';
     }
     
     return '';
 }
+
