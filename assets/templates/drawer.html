@@ -1,10 +1,8 @@
-<!-- Horae 主抽屉面板 -->
 <div id="horae_drawer" class="drawer">
     <div class="drawer-toggle">
-        <div id="horae_drawer_icon" class="drawer-icon fa-regular fa-clock fa-fw closedIcon interactable" title="Horae - 时光记忆" tabindex="0"></div>
+        <div id="horae_drawer_icon" class="drawer-icon fa-regular fa-clock fa-fw closedIcon interactable" title="Horae - Ký Ức Thời Gian" tabindex="0"></div>
     </div>
     <div id="horae_drawer_content" class="drawer-content closedDrawer">
-        <!-- 头部 -->
         <div class="drawer-header">
             <div class="horae-title">
                 <i class="fa-regular fa-clock"></i>
@@ -13,7 +11,6 @@
             <span class="horae-version">v1.0.0</span>
         </div>
         
-        <!-- 标签页导航 -->
         <div class="horae-tabs">
             <button class="horae-tab active" data-tab="status">
                 <i class="fa-solid fa-gauge"></i>
@@ -37,7 +34,6 @@
             </button>
         </div>
         
-        <!-- 标签页内容 -->
         <div class="horae-tab-contents">
             <div id="horae-tab-status" class="horae-tab-content active">
                 <div class="horae-state-section">
@@ -89,29 +85,26 @@
                 </div>
             </div>
             
-            <!-- 时间线页 -->
             <div id="horae-tab-timeline" class="horae-tab-content">
-                <!-- 待办事项区域 -->
                 <div class="horae-agenda-section">
                     <div class="horae-agenda-header">
                         <span><i class="fa-solid fa-list-check"></i> Việc cần làm</span>
-                        <button id="horae-btn-add-agenda" class="horae-icon-btn small" title="添加待办">
+                        <button id="horae-btn-add-agenda" class="horae-icon-btn small" title="Thêm việc cần làm">
                             <i class="fa-solid fa-plus"></i>
                         </button>
                     </div>
-                    <!-- 待办多选模式工具栏 -->
                     <div id="horae-agenda-multiselect-bar" class="horae-multiselect-bar" style="display: none;">
                         <div class="horae-multiselect-info">
                             <span id="horae-agenda-selected-count">0</span> mục đã chọn
                         </div>
                         <div class="horae-multiselect-actions">
-                            <button id="horae-btn-agenda-select-all" class="horae-icon-btn small" title="全选">
+                            <button id="horae-btn-agenda-select-all" class="horae-icon-btn small" title="Chọn tất cả">
                                 <i class="fa-solid fa-check-double"></i>
                             </button>
-                            <button id="horae-btn-agenda-delete" class="horae-icon-btn small danger" title="删除选中">
+                            <button id="horae-btn-agenda-delete" class="horae-icon-btn small danger" title="Xóa đã chọn">
                                 <i class="fa-solid fa-trash-can"></i>
                             </button>
-                            <button id="horae-btn-agenda-cancel-select" class="horae-icon-btn small" title="取消多选">
+                            <button id="horae-btn-agenda-cancel-select" class="horae-icon-btn small" title="Hủy đa chọn">
                                 <i class="fa-solid fa-xmark"></i>
                             </button>
                         </div>
@@ -121,7 +114,6 @@
                     </div>
                 </div>
                 
-                <!-- 事件时间线区域 -->
                 <div class="horae-timeline-header">
                     <span>Dòng thời gian sự kiện</span>
                     <div class="horae-timeline-controls">
@@ -131,7 +123,7 @@
                             <option value="重要">Quan trọng</option>
                             <option value="一般">Bình thường</option>
                         </select>
-                        <button id="horae-btn-scan-all" class="menu_button" title="刷新时间线">
+                        <button id="horae-btn-scan-all" class="menu_button" title="Làm mới dòng thời gian">
                             <i class="fa-solid fa-rotate"></i>
                         </button>
                     </div>
@@ -148,7 +140,6 @@
                 </div>
             </div>
             
-            <!-- 角色页 -->
             <div id="horae-tab-characters" class="horae-tab-content">
                 <div class="horae-subsection">
                     <div class="horae-subsection-title">Nhân vật có mặt</div>
@@ -172,22 +163,21 @@
                 </div>
             </div>
             
-            <!-- 物品页 -->
             <div id="horae-tab-items" class="horae-tab-content">
                 <div class="horae-items-toolbar">
                     <div class="horae-items-header">
                         <span>Danh sách theo dõi vật phẩm</span>
                         <div class="horae-items-controls">
-                            <select id="horae-items-holder-filter" class="horae-select" title="筛选持有人">
+                            <select id="horae-items-holder-filter" class="horae-select" title="Lọc người nắm giữ">
                                 <option value="all">Tất cả mọi người</option>
                             </select>
-                            <select id="horae-items-filter" class="horae-select" title="筛选物品级别">
+                            <select id="horae-items-filter" class="horae-select" title="Lọc cấp độ vật phẩm">
                                 <option value="all">Tất cả</option>
                                 <option value="关键">Then chốt</option>
                                 <option value="重要">Quan trọng</option>
                                 <option value="一般">Bình thường</option>
                             </select>
-                            <button id="horae-btn-items-refresh" class="horae-icon-btn" title="刷新物品列表">
+                            <button id="horae-btn-items-refresh" class="horae-icon-btn" title="Làm mới danh sách vật phẩm">
                                 <i class="fa-solid fa-rotate"></i>
                             </button>
                         </div>
@@ -197,25 +187,25 @@
                         <input type="text" id="horae-items-search" class="horae-search-input" placeholder="Tìm tên vật phẩm, người giữ, vị trí...">
                     </div>
                 </div>
-                <!-- 多选模式工具栏 -->
                 <div id="horae-items-multiselect-bar" class="horae-multiselect-bar" style="display: none;">
                     <div class="horae-multiselect-info">
                         <span id="horae-items-selected-count">0</span> mục đã chọn
                     </div>
                     <div class="horae-multiselect-actions">
-                        <button id="horae-btn-items-select-all" class="horae-icon-btn small" title="全选">
+                        <button id="horae-btn-items-select-all" class="horae-icon-btn small" title="Chọn tất cả">
                             <i class="fa-solid fa-check-double"></i>
                         </button>
-                        <button id="horae-btn-items-delete" class="horae-icon-btn small danger" title="删除选中">
+                        <button id="horae-btn-items-delete" class="horae-icon-btn small danger" title="Xóa đã chọn">
                             <i class="fa-solid fa-trash-can"></i>
                         </button>
-                        <button id="horae-btn-items-cancel-select" class="horae-icon-btn small" title="取消多选">
+                        <button id="horae-btn-items-cancel-select" class="horae-icon-btn small" title="Hủy đa chọn">
                             <i class="fa-solid fa-xmark"></i>
                         </button>
                     </div>
                 </div>
                 <div class="horae-items-hint">
-                    <i class="fa-solid fa-hand-pointer"></i> Nhấn giữ vật phẩm để vào chế độ đa chọn</div>
+                    <i class="fa-solid fa-hand-pointer"></i> Nhấn giữ vật phẩm để vào chế độ đa chọn
+                </div>
                 <div id="horae-items-full-list" class="horae-items-full-list">
                     <div class="horae-empty-state">
                         <i class="fa-solid fa-box-open"></i>
@@ -224,7 +214,6 @@
                 </div>
             </div>
             
-            <!-- 设置页 -->
             <div id="horae-tab-settings" class="horae-tab-content">
                 <div class="horae-settings-section">
                     <div class="horae-section-header">
@@ -256,8 +245,7 @@
                     <div class="horae-setting-item">
                         <label>
                             <input type="checkbox" id="horae-setting-show-panel" checked>
-                            Tự động tiêm ngữ cảnh trạng thái
-Hiển thị bảng siêu dữ liệu tin nhắn
+                            Hiển thị bảng siêu dữ liệu tin nhắn
                         </label>
                     </div>
                 </div>
@@ -297,7 +285,7 @@ Hiển thị bảng siêu dữ liệu tin nhắn
                     </div>
                 </div>
                 
-               <div class="horae-settings-section">
+                <div class="horae-settings-section">
                     <div class="horae-section-header">
                         <i class="fa-solid fa-table-cells"></i>
                         Bảng tùy chỉnh
@@ -310,8 +298,7 @@ Hiển thị bảng siêu dữ liệu tin nhắn
                     </span>
                     
                     <div id="horae-custom-tables-list" class="horae-custom-tables-list">
-                        <!-- 动态生成 -->
-                    </div>
+                        </div>
                     
                     <div class="horae-table-buttons">
                         <button id="horae-btn-add-table" class="horae-btn-add-table">
