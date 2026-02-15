@@ -1,3 +1,4 @@
+<!-- Horae 消息元数据面板模板 -->
 <div class="horae-message-panel" data-message-id="{{messageId}}">
     <div class="horae-panel-toggle">
         <div class="horae-panel-icon">
@@ -8,47 +9,52 @@
             <span class="horae-summary-divider">|</span>
             <span class="horae-summary-event">{{eventSummary}}</span>
             <span class="horae-summary-divider">|</span>
-            <span class="horae-summary-chars">{{characterCount}} người có mặt</span>
+            <span class="horae-summary-chars">{{characterCount}}người có mặt</span>
         </div>
         <div class="horae-panel-actions">
-            <button class="horae-btn-edit" title="Chỉnh sửa">
+            <button class="horae-btn-edit" title="编辑">
                 <i class="fa-solid fa-pen"></i>
             </button>
-            <button class="horae-btn-expand" title="Mở rộng/Thu gọn">
+            <button class="horae-btn-expand" title="展开/收起">
                 <i class="fa-solid fa-chevron-down"></i>
             </button>
         </div>
     </div>
     <div class="horae-panel-content" style="display: none;">
         <div class="horae-panel-grid">
+            <!-- 时间行 -->
             <div class="horae-panel-row">
                 <label><i class="fa-regular fa-clock"></i> Thời gian</label>
                 <div class="horae-panel-value">
-                    <input type="text" class="horae-input-datetime" placeholder="Ngày Giờ (Ví dụ 2026/2/4 15:00)" value="{{storyDate}}{{#storyTime}} {{storyTime}}{{/storyTime}}">
+                    <input type="text" class="horae-input-datetime" placeholder="日期 时间（如 2026/2/4 15:00）" value="{{storyDate}}{{#storyTime}} {{storyTime}}{{/storyTime}}">
                 </div>
             </div>
 
+            <!-- 地点行 -->
             <div class="horae-panel-row">
                 <label><i class="fa-solid fa-location-dot"></i> Địa điểm</label>
                 <div class="horae-panel-value">
-                    <input type="text" class="horae-input-location" placeholder="Ví dụ: Quán cà phê > Tầng 2" value="{{location}}">
+                    <input type="text" class="horae-input-location" placeholder="如: 咖啡馆 > 二楼" value="{{location}}">
                 </div>
             </div>
 
+            <!-- 氛围行 -->
             <div class="horae-panel-row">
                 <label><i class="fa-solid fa-cloud"></i> Bầu không khí</label>
                 <div class="horae-panel-value">
-                    <input type="text" class="horae-input-atmosphere" placeholder="Ví dụ: Thư giãn, Căng thẳng" value="{{atmosphere}}">
+                    <input type="text" class="horae-input-atmosphere" placeholder="如: 轻松、紧张" value="{{atmosphere}}">
                 </div>
             </div>
 
+            <!-- 在场角色 -->
             <div class="horae-panel-row">
                 <label><i class="fa-solid fa-users"></i> Có mặt</label>
                 <div class="horae-panel-value">
-                    <input type="text" class="horae-input-characters" placeholder="Phân cách bằng dấu phẩy" value="{{characters}}">
+                    <input type="text" class="horae-input-characters" placeholder="用逗号分隔" value="{{characters}}">
                 </div>
             </div>
 
+            <!-- 服装列表 -->
             <div class="horae-panel-row full-width">
                 <label><i class="fa-solid fa-shirt"></i> Thay đổi trang phục</label>
                 <div class="horae-costume-editor" id="horae-costumes-{{messageId}}">
@@ -59,6 +65,7 @@
                 </button>
             </div>
 
+            <!-- 物品列表 -->
             <div class="horae-panel-row full-width">
                 <label><i class="fa-solid fa-box-open"></i> Thay đổi vật phẩm</label>
                 <div class="horae-items-editor" id="horae-items-{{messageId}}">
@@ -69,6 +76,7 @@
                 </button>
             </div>
 
+            <!-- 事件标记 -->
             <div class="horae-panel-row full-width">
                 <label><i class="fa-solid fa-bookmark"></i> Đánh dấu sự kiện</label>
                 <div class="horae-event-editor">
@@ -82,12 +90,13 @@
                 </div>
             </div>
 
+            <!-- 好感度变化 -->
             <div class="horae-panel-row full-width">
                 <label><i class="fa-solid fa-heart"></i> Thay đổi độ hảo cảm</label>
                 <div class="horae-affection-editor" id="horae-affection-{{messageId}}">
                     {{affectionEditors}}
                 </div>
-                <button class="horae-btn-add-affection" title="Thêm thay đổi độ hảo cảm">
+                <button class="horae-btn-add-affection" title="添加好感度变化">
                     <i class="fa-solid fa-plus"></i> Thêm
                 </button>
             </div>
