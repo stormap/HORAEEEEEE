@@ -620,43 +620,43 @@ class HoraeManager {
                     
                     const { days, fromDate, toDate } = result;
                     
-                    if (days === 0) return '(今天)';
-                    if (days === 1) return '(昨天)';
-                    if (days === 2) return '(前天)';
-                    if (days === 3) return '(大前天)';
-                    if (days === -1) return '(明天)';
-                    if (days === -2) return '(后天)';
-                    if (days === -3) return '(大后天)';
+                    if (days === 0) return '(Hôm nay)';
+                    if (days === 1) return '(Hôm qua)';
+                    if (days === 2) return '(Hôm kia)';
+                    if (days === 3) return '(3 ngày trước)';
+                    if (days === -1) return '(Ngày mai)';
+                    if (days === -2) return '(Ngày kia)';
+                    if (days === -3) return '(3 ngày nữa)';
                     
                     // 上周几（4-13天前且有日期信息）
                     if (days >= 4 && days <= 13 && fromDate) {
-                        const WEEKDAY_NAMES = ['日', '一', '二', '三', '四', '五', '六'];
+                        const WEEKDAY_NAMES = ['CN', 'Hai', 'Ba', 'Tư', 'Năm', 'Sáu', 'Bảy'];
                         const weekday = fromDate.getDay();
-                        return `(上周${WEEKDAY_NAMES[weekday]})`;
+                        return `(Thứ ${WEEKDAY_NAMES[weekday]} tuần trước)`;
                     }
                     
-                    // 上个月
+                    // Tháng trước
                     if (days >= 20 && days < 60 && fromDate && toDate) {
                         const fromMonth = fromDate.getMonth();
                         const toMonth = toDate.getMonth();
                         if (fromMonth !== toMonth) {
-                            return `(上个月${fromDate.getDate()}号)`;
+                            return `(Ngày ${fromDate.getDate()} tháng trước)`;
                         }
                     }
                     
-                    // 去年
+                    // Năm ngoái
                     if (days >= 300 && fromDate && toDate) {
                         const fromYear = fromDate.getFullYear();
                         const toYear = toDate.getFullYear();
                         if (fromYear < toYear) {
                             const fromMonth = fromDate.getMonth() + 1;
-                            return `(去年${fromMonth}月)`;
+                            return `(Tháng ${fromMonth} năm ngoái)`;
                         }
                     }
                     
                     // 通用格式
-                    if (days > 0 && days < 30) return `(${days}天前)`;
-                    if (days > 0) return `(${Math.round(days / 30)}个月前)`;
+                    if (days > 0 && days < 30) return `(${days} ngày trước)`;
+                    if (days > 0) return `(${Math.round(days / 30)} tháng trước)`;
                     if (days === -999 || days === -998 || days === -997) return '';
                     return '';
                 };
@@ -765,7 +765,7 @@ class HoraeManager {
             // 6. 提示空列
             if (emptyCols.length > 0) {
                 const emptyColNames = emptyCols.map(c => data[`0-${c}`] || `列${c}`);
-                lines.push(`(${emptyColNames.join('、')}：暂无数据，对应事件未发生时禁止填写)`);
+                lines.push(`(${emptyColNames.join('、')}：Tạm thời không có dữ liệu, cấm điền khi sự kiện tương ứng chưa xảy ra)`);
             }
         }
         
@@ -774,15 +774,15 @@ class HoraeManager {
 
     /** 获取好感度等级描述 */
     getAffectionLevel(value) {
-        if (value >= 80) return '挚爱';
-        if (value >= 60) return '亲密';
-        if (value >= 40) return '好感';
-        if (value >= 20) return '友好';
-        if (value >= 0) return '中立';
-        if (value >= -20) return '冷淡';
-        if (value >= -40) return '厌恶';
-        if (value >= -60) return '敌视';
-        return '仇恨';
+        if (value >= 80) return 'Tri kỷ';
+        if (value >= 60) return 'Thân mật';
+        if (value >= 40) return 'Có cảm tình';
+        if (value >= 20) return 'Thân thiện';
+        if (value >= 0) return 'Trung lập';
+        if (value >= -20) return 'Lạnh nhạt';
+        if (value >= -40) return 'Ghét bỏ';
+        if (value >= -60) return 'Thù địch';
+        return 'Căm thù';
     }
 
     /** 解析AI回复中的horae标签 */
@@ -1271,7 +1271,7 @@ class HoraeManager {
             const updateName = (update.name || '').trim();
             const table = tables.find(t => (t.name || '').trim() === updateName);
             if (!table) {
-                console.warn(`[Horae] 表格 "${updateName}" 不存在（已有表格：${tables.map(t => t.name).join(', ')}），跳过`);
+                console.warn(`[Horae] Bảng "${updateName}" không tồn tại (các bảng hiện có: ${tables.map(t => t.name).join(', ')}), bỏ qua`);
                 continue;
             }
             
@@ -1287,7 +1287,7 @@ class HoraeManager {
                 if (r === 0 || c === 0) {
                     const existing = table.data[key];
                     if (existing && existing.trim()) {
-                        console.log(`[Horae] 表格 "${updateName}" 跳过表头单元格 [${r},${c}]（已有: "${existing}"）`);
+                        console.log(`[Horae] Bảng "${updateName}" bỏ qua ô tiêu đề [${r},${c}] (đã có: "${existing}")`);
                         continue;
                     }
                 }
@@ -1299,7 +1299,7 @@ class HoraeManager {
                 if (c + 1 > (table.cols || 2)) table.cols = c + 1;
             }
             
-            console.log(`[Horae] 表格 "${updateName}" 已更新 ${updatedCount} 个单元格`);
+            console.log(`[Horae] Bảng "${updateName}" đã cập nhật ${updatedCount} ô`);
         }
     }
 
@@ -1356,7 +1356,7 @@ class HoraeManager {
             }
         }
         
-        console.log(`[Horae] 表格数据已重建，回放了 ${totalApplied} 条消息的表格贡献`);
+        console.log(`[Horae] Dữ liệu bảng đã được tái tạo, đã phát lại đóng góp bảng của ${totalApplied} tin nhắn`);
     }
 
     /** 扫描并注入历史记录 */
@@ -1414,7 +1414,7 @@ class HoraeManager {
                         processed++;
                     }
                 } catch (error) {
-                    console.error(`[Horae] 分析消息 #${i} 失败:`, error);
+                    console.error(`[Horae] Phân tích tin nhắn #${i} thất bại:`, error);
                 }
             } else {
                 const meta = createEmptyMeta();
@@ -1432,8 +1432,8 @@ class HoraeManager {
 
     /** 生成系统提示词附加内容 */
     generateSystemPromptAddition() {
-        const userName = this.context?.name1 || '主角';
-        const charName = this.context?.name2 || '角色';
+        const userName = this.context?.name1 || 'Nhân vật chính';
+        const charName = this.context?.name2 || 'Nhân vật';
         
         return `
 【Horae记忆系统】（以下示例仅为示范，勿直接原句用于正文！）
