@@ -1,50 +1,50 @@
 /**
- * Horae - Trình quản lý cốt lõi
- * Chịu trách nhiệm lưu trữ, phân tích và tổng hợp siêu dữ liệu
+ * Horae - 核心管理器
+ * 负责元数据的存储、解析、聚合
  */
 
 import { parseStoryDate, calculateRelativeTime, calculateDetailedRelativeTime, generateTimeReference, formatRelativeTime, formatFullDateTime } from '../utils/timeUtils.js';
 
 /**
  * @typedef {Object} HoraeTimestamp
- * @property {string} story_date - Ngày cốt truyện, vd "10/1"
- * @property {string} story_time - Thời gian cốt truyện, vd "15:00" hoặc "Buổi chiều"
- * @property {string} absolute - Timestamp thực tế định dạng ISO
+ * @property {string} story_date - 剧情日期，如 "10/1"
+ * @property {string} story_time - 剧情时间，如 "15:00" 或 "下午"
+ * @property {string} absolute - ISO格式的实际时间戳
  */
 
 /**
  * @typedef {Object} HoraeScene
- * @property {string} location - Địa điểm bối cảnh
- * @property {string[]} characters_present - Danh sách nhân vật có mặt
- * @property {string} atmosphere - Bầu không khí
+ * @property {string} location - 场景地点
+ * @property {string[]} characters_present - 在场角色列表
+ * @property {string} atmosphere - 场景氛围
  */
 
 /**
  * @typedef {Object} HoraeEvent
- * @property {boolean} is_important - Có phải sự kiện quan trọng không
- * @property {string} level - Cấp độ sự kiện: Bình thường/Quan trọng/Then chốt
- * @property {string} summary - Tóm tắt sự kiện
+ * @property {boolean} is_important - 是否重要事件
+ * @property {string} level - 事件级别：一般/重要/关键
+ * @property {string} summary - 事件摘要
  */
 
 /**
  * @typedef {Object} HoraeItemInfo
- * @property {string|null} icon - Biểu tượng emoji
- * @property {string|null} holder - Người nắm giữ
- * @property {string} location - Mô tả vị trí
+ * @property {string|null} icon - emoji图标
+ * @property {string|null} holder - 持有者
+ * @property {string} location - 位置描述
  */
 
 /**
  * @typedef {Object} HoraeMeta
  * @property {HoraeTimestamp} timestamp
  * @property {HoraeScene} scene
- * @property {Object.<string, string>} costumes - Trang phục nhân vật {Tên: Mô tả}
- * @property {Object.<string, HoraeItemInfo>} items - Theo dõi vật phẩm
+ * @property {Object.<string, string>} costumes - 角色服装 {角色名: 服装描述}
+ * @property {Object.<string, HoraeItemInfo>} items - 物品追踪
  * @property {HoraeEvent|null} event
- * @property {Object.<string, string|number>} affection - Độ hảo cảm
- * @property {Object.<string, {description: string, first_seen: string}>} npcs - NPC tạm thời
+ * @property {Object.<string, string|number>} affection - 好感度
+ * @property {Object.<string, {description: string, first_seen: string}>} npcs - 临时NPC
  */
 
-/** Tạo đối tượng meta rỗng */
+/** 创建空的元数据对象 */
 export function createEmptyMeta() {
     return {
         timestamp: {
@@ -59,38 +59,37 @@ export function createEmptyMeta() {
         },
         costumes: {},
         items: {},
-        deletedItems: [],  // Danh sách tên vật phẩm đã tiêu hao/xóa
-        events: [],  // Hỗ trợ nhiều sự kiện
+        deletedItems: [],  // 已消耗/删除的物品名称列表
+        events: [],  // 支持多个事件
         affection: {},
         npcs: {},
-        agenda: []   // Việc cần làm
+        agenda: []   // 待办事项
     };
 }
 
 /**
- * Trích xuất tên cơ bản của vật phẩm (loại bỏ ngoặc số lượng ở cuối)
- * "Xương bò tươi(5 cân)" → "Xương bò tươi"
- * "Nước sạch(9L)" → "Nước sạch"
- * "Túi cứu thương" → "Túi cứu thương" (Không có số lượng, giữ nguyên)
- * "Túi cứu thương(Đã mở)" → Giữ nguyên (Trong ngoặc không bắt đầu bằng số)
+ * 提取物品的基本名称（去掉末尾的数量括号）
+ * "新鲜牛大骨(5斤)" → "新鲜牛大骨"
+ * "清水(9L)" → "清水"
+ * "简易急救包" → "简易急救包"（无数量，不变）
+ * "简易急救包(已开封)" → 不变（非数字开头的括号不去掉）
  */
-// Lượng từ đơn lẻ: 1 cái = chỉ là một cái, có thể bỏ qua. Lượng từ thuần (cái)(chiếc) cũng không có ý nghĩa
-// Đã thêm các lượng từ tiếng Việt vào danh sách
-const COUNTING_CLASSIFIERS = '个把条块张根口份枚只颗支件套双对碗杯盘盆串束扎cái chiếc con hòn viên cây thanh bộ đôi bát ly đĩa chậu bó xấp quyển cuốn';
-// Đơn vị chứa/lô: 1 thùng = một thùng (bên trong có nhiều), không thể bỏ qua
-// Đơn vị đo lường (cân/L/kg...): Có ý nghĩa đo lường thực tế, không thể bỏ qua
+// 个体量词：1个 = 就一个，可省略。纯量词(个)(把)也无意义
+const COUNTING_CLASSIFIERS = '个把条块张根口份枚只颗支件套双对碗杯盘盆串束扎';
+// 容器/批量单位：1箱 = 一箱(里面有很多)，不可省略
+// 度量单位(斤/L/kg等)：有实际计量意义，不可省略
 
-// ID vật phẩm: 3 chữ số, đệm số 0 bên trái, vd 001, 002...
+// 物品ID：3位数字左补零，如 001, 002, ...
 function padItemId(id) { return String(id).padStart(3, '0'); }
 
 function getItemBaseName(name) {
     return name
-        .replace(/[\(（][\d][\d\.\/]*[a-zA-Z\u4e00-\u9fff\u00C0-\u1EF9]*[\)）]$/, '')  // Số + đơn vị bất kỳ
-        .replace(new RegExp(`[\\(（][${COUNTING_CLASSIFIERS}][\\)）]$`), '')  // Lượng từ đơn lẻ thuần túy (AI định dạng sai)
+        .replace(/[\(（][\d][\d\.\/]*[a-zA-Z\u4e00-\u9fff]*[\)）]$/, '')  // 数字+任意单位
+        .replace(new RegExp(`[\\(（][${COUNTING_CLASSIFIERS}][\\)）]$`), '')  // 纯个体量词（AI错误格式）
         .trim();
 }
 
-/** Tìm vật phẩm đã tồn tại theo tên cơ bản */
+/** 按基本名查找已有物品 */
 function findExistingItemByBaseName(stateItems, newName) {
     const newBase = getItemBaseName(newName);
     if (stateItems[newName]) return newName;
@@ -102,44 +101,44 @@ function findExistingItemByBaseName(stateItems, newName) {
     return null;
 }
 
-/** Trình quản lý Horae */
+/** Horae 管理器 */
 class HoraeManager {
     constructor() {
         this.context = null;
         this.settings = null;
     }
 
-    /** Khởi tạo trình quản lý */
+    /** 初始化管理器 */
     init(context, settings) {
         this.context = context;
         this.settings = settings;
     }
 
-    /** Lấy lịch sử trò chuyện hiện tại */
+    /** 获取当前聊天记录 */
     getChat() {
         return this.context?.chat || [];
     }
 
-    /** Lấy meta của tin nhắn */
+    /** 获取消息元数据 */
     getMessageMeta(messageIndex) {
         const chat = this.getChat();
         if (messageIndex < 0 || messageIndex >= chat.length) return null;
         return chat[messageIndex].horae_meta || null;
     }
 
-    /** Thiết lập meta cho tin nhắn */
+    /** 设置消息元数据 */
     setMessageMeta(messageIndex, meta) {
         const chat = this.getChat();
         if (messageIndex < 0 || messageIndex >= chat.length) return;
         chat[messageIndex].horae_meta = meta;
     }
 
-    /** Tổng hợp meta của tất cả tin nhắn, lấy trạng thái mới nhất */
+    /** 聚合所有消息元数据，获取最新状态 */
     getLatestState() {
         const chat = this.getChat();
         const state = createEmptyMeta();
         
-        // Duyệt từ đầu đến cuối, cái sau ghi đè cái trước
+        // 从头到尾遍历，后面的覆盖前面的
         for (let i = 0; i < chat.length; i++) {
             const meta = chat[i].horae_meta;
             if (!meta) continue;
@@ -165,60 +164,59 @@ class HoraeManager {
                 Object.assign(state.costumes, meta.costumes);
             }
             
-            // Vật phẩm: Hợp nhất và cập nhật
+            // 物品：合并更新
             if (meta.items) {
                 for (let [name, newInfo] of Object.entries(meta.items)) {
-                    // Loại bỏ đánh dấu số lượng vô nghĩa
-                    // (1) Số 1 trần → Bỏ
+                    // 去掉无意义的数量标记
+                    // (1) 裸数字1 → 去掉
                     name = name.replace(/[\(（]1[\)）]$/, '').trim();
-                    // Lượng từ đơn lẻ + số 1 → Bỏ
+                    // 个体量词+数字1 → 去掉
                     name = name.replace(new RegExp(`[\\(（]1[${COUNTING_CLASSIFIERS}][\\)）]$`), '').trim();
-                    // Lượng từ đơn lẻ thuần túy → Bỏ
+                    // 纯个体量词 → 去掉
                     name = name.replace(new RegExp(`[\\(（][${COUNTING_CLASSIFIERS}][\\)）]$`), '').trim();
-                    // Giữ lại đơn vị đo lường/chứa đựng
+                    // 度量/容器单位保留
                     
-                    // Số lượng là 0 coi như tiêu hao, tự động xóa
-                    const zeroMatch = name.match(/[\(（]0[a-zA-Z\u4e00-\u9fff\u00C0-\u1EF9]*[\)）]$/);
+                    // 数量为0视为消耗，自动删除
+                    const zeroMatch = name.match(/[\(（]0[a-zA-Z\u4e00-\u9fff]*[\)）]$/);
                     if (zeroMatch) {
                         const baseName = getItemBaseName(name);
                         for (const itemName of Object.keys(state.items)) {
                             if (getItemBaseName(itemName).toLowerCase() === baseName.toLowerCase()) {
                                 delete state.items[itemName];
-                                console.log(`[Horae] Số lượng vật phẩm về 0, tự động xóa: ${itemName}`);
+                                console.log(`[Horae] 物品数量归零自动删除: ${itemName}`);
                             }
                         }
                         continue;
                     }
                     
-                    // Phát hiện đánh dấu trạng thái tiêu hao, coi như xóa
-                    // Đã thêm từ khóa tiếng Việt
-                    const consumedPatterns = /[\(（](已消耗|已用完|已销毁|消耗殆尽|消耗|用尽|đã dùng|đã tiêu thụ|đã hết|cạn kiệt|hết|xong)[\)）]/;
-                    const holderConsumed = /^(消耗|已消耗|已用完|消耗殆尽|用尽|无|hết|đã dùng|đã hết)$/;
+                    // 检测消耗状态标记，视为删除
+                    const consumedPatterns = /[\(（](已消耗|已用完|已销毁|消耗殆尽|消耗|用尽)[\)）]/;
+                    const holderConsumed = /^(消耗|已消耗|已用完|消耗殆尽|用尽|无)$/;
                     if (consumedPatterns.test(name) || holderConsumed.test(newInfo.holder || '')) {
                         const cleanName = name.replace(consumedPatterns, '').trim();
                         const baseName = getItemBaseName(cleanName || name);
                         for (const itemName of Object.keys(state.items)) {
                             if (getItemBaseName(itemName).toLowerCase() === baseName.toLowerCase()) {
                                 delete state.items[itemName];
-                                console.log(`[Horae] Vật phẩm đã tiêu hao, tự động xóa: ${itemName}`);
+                                console.log(`[Horae] 物品已消耗自动删除: ${itemName}`);
                             }
                         }
                         continue;
                     }
                     
-                    // Khớp tên cơ bản với vật phẩm đã có
+                    // 基本名匹配已有物品
                     const existingKey = findExistingItemByBaseName(state.items, name);
                     
                     if (existingKey) {
                         const existingItem = state.items[existingKey];
-                        // Chỉ hợp nhất các trường thực sự tồn tại
+                        // 只合并实际存在的字段
                         const mergedItem = { ...existingItem };
                         if (newInfo.icon) mergedItem.icon = newInfo.icon;
-                        // importance: Chỉ tăng không giảm (rỗng < ! < !!)
+                        // importance：只升不降（空 < ! < !!）
                         mergedItem.importance = newInfo.importance || existingItem.importance || '';
                         if (newInfo.holder !== undefined) mergedItem.holder = newInfo.holder;
                         if (newInfo.location !== undefined) mergedItem.location = newInfo.location;
-                        // Chỉ ghi đè nếu mô tả không rỗng
+                        // 非空描述才覆盖
                         if (newInfo.description !== undefined && newInfo.description.trim()) {
                             mergedItem.description = newInfo.description;
                         }
@@ -226,7 +224,7 @@ class HoraeManager {
                         
                         if (existingKey !== name) {
                             delete state.items[existingKey];
-                            console.log(`[Horae] Cập nhật số lượng vật phẩm: ${existingKey} → ${name}`);
+                            console.log(`[Horae] 物品数量更新: ${existingKey} → ${name}`);
                         }
                         state.items[name] = mergedItem;
                     } else {
@@ -235,7 +233,7 @@ class HoraeManager {
                 }
             }
             
-            // Xử lý vật phẩm đã xóa
+            // 处理已删除物品
             if (meta.deletedItems && meta.deletedItems.length > 0) {
                 for (const deletedItem of meta.deletedItems) {
                     const deleteBase = getItemBaseName(deletedItem).toLowerCase();
@@ -244,17 +242,17 @@ class HoraeManager {
                         if (itemName.toLowerCase() === deletedItem.toLowerCase() ||
                             itemBase === deleteBase) {
                             delete state.items[itemName];
-                            console.log(`[Horae] Vật phẩm đã bị xóa: ${itemName}`);
+                            console.log(`[Horae] 物品已删除: ${itemName}`);
                         }
                     }
                 }
             }
             
-            // Độ hảo cảm: Hỗ trợ giá trị tuyệt đối và tương đối
+            // 好感度：支持绝对值和相对值
             if (meta.affection) {
                 for (const [key, value] of Object.entries(meta.affection)) {
                     if (typeof value === 'object' && value !== null) {
-                        // Định dạng mới: {type: 'absolute'|'relative', value: number|string}
+                        // 新格式：{type: 'absolute'|'relative', value: number|string}
                         if (value.type === 'absolute') {
                             state.affection[key] = value.value;
                         } else if (value.type === 'relative') {
@@ -262,25 +260,25 @@ class HoraeManager {
                             state.affection[key] = (state.affection[key] || 0) + delta;
                         }
                     } else {
-                        // Tương thích định dạng cũ
+                        // 旧格式兼容
                         const numValue = typeof value === 'number' ? value : parseInt(value) || 0;
                         state.affection[key] = (state.affection[key] || 0) + numValue;
                     }
                 }
             }
             
-            // NPC: Hợp nhất từng trường, giữ lại _id
+            // NPC：逐字段合并，保留_id
             if (meta.npcs) {
-                // Các trường có thể cập nhật vs Các trường được bảo vệ
+                // 可更新字段 vs 受保护字段
                 const updatableFields = ['appearance', 'personality', 'relationship', 'age', 'job', 'note'];
-                const protectedFields = ['gender', 'race']; // Giới tính/Chủng tộc hiếm khi thay đổi
+                const protectedFields = ['gender', 'race']; // 性别/种族极少改变
                 for (const [name, newNpc] of Object.entries(meta.npcs)) {
                     const existing = state.npcs[name];
                     if (existing) {
                         for (const field of updatableFields) {
                             if (newNpc[field] !== undefined) existing[field] = newNpc[field];
                         }
-                        // Khi age thay đổi, ghi lại ngày cốt truyện làm mốc
+                        // age变更时记录剧情日期作为基准
                         if (newNpc.age !== undefined && newNpc.age !== '') {
                             if (!existing._ageRefDate) {
                                 existing._ageRefDate = state.timestamp.story_date || '';
@@ -291,7 +289,7 @@ class HoraeManager {
                                 existing._ageRefDate = state.timestamp.story_date || '';
                             }
                         }
-                        // Trường được bảo vệ: Chỉ điền khi chưa được thiết lập
+                        // 受保护字段：仅在未设定时才填入
                         for (const field of protectedFields) {
                             if (newNpc[field] !== undefined && !existing[field]) {
                                 existing[field] = newNpc[field];
@@ -317,7 +315,7 @@ class HoraeManager {
             }
         }
         
-        // Cấp ID cho vật phẩm chưa có ID
+        // 为无ID物品分配ID
         let maxId = 0;
         for (const info of Object.values(state.items)) {
             if (info._id) {
@@ -332,7 +330,7 @@ class HoraeManager {
             }
         }
         
-        // Cấp ID cho NPC chưa có ID
+        // 为无ID的NPC分配ID
         let maxNpcId = 0;
         for (const info of Object.values(state.npcs)) {
             if (info._id) {
@@ -350,26 +348,26 @@ class HoraeManager {
         return state;
     }
 
-    /** Tính toán tuổi hiện tại của NPC dựa trên thời gian trôi qua của cốt truyện */
+    /** 根据剧情时间推移计算NPC当前年龄 */
     calcCurrentAge(npcInfo, currentStoryDate) {
         const original = npcInfo.age || '';
         const refDate = npcInfo._ageRefDate || '';
         
-        // Các trường hợp không thể tính toán: Không có tuổi, không có ngày tham chiếu, không có ngày hiện tại
+        // 无法推算的情况：无年龄、无参考日期、无当前日期
         if (!original || !refDate || !currentStoryDate) {
             return { display: original, original, changed: false };
         }
         
         const ageNum = parseInt(original);
         if (isNaN(ageNum)) {
-            // Tuổi không phải số, không thể tính toán
+            // 非数字年龄，无法推算
             return { display: original, original, changed: false };
         }
         
         const refParsed = parseStoryDate(refDate);
         const curParsed = parseStoryDate(currentStoryDate);
         
-        // Cần cả hai đều là loại standard và có năm mới tính được
+        // 需要两者都是 standard 类型且有年份才能推算
         if (!refParsed || !curParsed || refParsed.type !== 'standard' || curParsed.type !== 'standard') {
             return { display: original, original, changed: false };
         }
@@ -379,7 +377,7 @@ class HoraeManager {
         
         let yearDiff = curParsed.year - refParsed.year;
         
-        // Phán đoán tháng ngày xem đã qua sinh nhật chưa
+        // 月日判断是否已过生日
         if (refParsed.month && curParsed.month) {
             if (curParsed.month < refParsed.month || 
                 (curParsed.month === refParsed.month && (curParsed.day || 1) < (refParsed.day || 1))) {
@@ -399,7 +397,7 @@ class HoraeManager {
         };
     }
 
-    /** Tìm vật phẩm qua ID */
+    /** 通过ID查找物品 */
     findItemById(items, id) {
         const normalizedId = id.replace(/^#/, '').trim();
         for (const [name, info] of Object.entries(items)) {
@@ -410,7 +408,7 @@ class HoraeManager {
         return null;
     }
 
-    /** Lấy danh sách sự kiện (dùng cho hiển thị dòng thời gian) */
+    /** 获取事件列表（用于时间线显示） */
     getEvents(limit = 50, filterLevel = 'all') {
         const chat = this.getChat();
         const events = [];
@@ -418,7 +416,7 @@ class HoraeManager {
         for (let i = 0; i < chat.length && events.length < limit; i++) {
             const meta = chat[i].horae_meta;
             
-            // Hỗ trợ định dạng mới (mảng events) và định dạng cũ (event đơn lẻ)
+            // 支持新格式（events数组）和旧格式（单个event）
             const metaEvents = meta?.events || (meta?.event ? [meta.event] : []);
             
             for (let j = 0; j < metaEvents.length; j++) {
@@ -431,7 +429,7 @@ class HoraeManager {
                 
                 events.push({
                     messageIndex: i,
-                    eventIndex: j,  // Index của sự kiện trong tin nhắn đó
+                    eventIndex: j,  // 事件在该消息中的索引
                     timestamp: meta.timestamp,
                     event: evt
                 });
@@ -443,44 +441,44 @@ class HoraeManager {
         return events;
     }
 
-    /** Lấy danh sách sự kiện quan trọng (tương thích lệnh gọi cũ) */
+    /** 获取重要事件列表（兼容旧调用） */
     getImportantEvents(limit = 50) {
         return this.getEvents(limit, 'all');
     }
 
-    /** Tạo nội dung prompt ngữ cảnh thu gọn (Context Injection) */
+    /** 生成紧凑的上下文注入内容 */
     generateCompactPrompt() {
         const state = this.getLatestState();
         const lines = [];
         
-        // Tiêu đề bản ghi trạng thái
-        lines.push('[Bản ghi trạng thái hiện tại——So sánh với cốt truyện lượt này, chỉ xuất các trường có thay đổi thực sự trong <horae>]');
+        // 状态快照头
+        lines.push('[当前状态快照——对比本回合剧情，仅在<horae>中输出发生实质变化的字段]');
         
         const sendTimeline = this.settings?.sendTimeline !== false;
         const sendCharacters = this.settings?.sendCharacters !== false;
         const sendItems = this.settings?.sendItems !== false;
         
-        // Thời gian
+        // 时间
         if (state.timestamp.story_date) {
             const fullDateTime = formatFullDateTime(state.timestamp.story_date, state.timestamp.story_time);
-            lines.push(`[Thời gian|${fullDateTime}]`);
+            lines.push(`[时间|${fullDateTime}]`);
             
-            // Tham chiếu thời gian
+            // 时间参考
             if (sendTimeline) {
                 const timeRef = generateTimeReference(state.timestamp.story_date);
                 if (timeRef && timeRef.type === 'standard') {
-                    // Lịch tiêu chuẩn
-                    lines.push(`[Tham chiếu thời gian|Hôm qua=${timeRef.yesterday}|Hôm kia=${timeRef.dayBefore}|3 ngày trước=${timeRef.threeDaysAgo}]`);
+                    // 标准日历
+                    lines.push(`[时间参考|昨天=${timeRef.yesterday}|前天=${timeRef.dayBefore}|3天前=${timeRef.threeDaysAgo}]`);
                 } else if (timeRef && timeRef.type === 'fantasy') {
-                    // Lịch giả tưởng
-                    lines.push(`[Tham chiếu thời gian|Chế độ lịch giả tưởng, xem dấu mốc thời gian tương đối trong quỹ đạo cốt truyện]`);
+                    // 奇幻日历
+                    lines.push(`[时间参考|奇幻日历模式，参见剧情轨迹中的相对时间标记]`);
                 }
             }
         }
         
-        // Bối cảnh
+        // 场景
         if (state.scene.location) {
-            let sceneStr = `[Bối cảnh|${state.scene.location}`;
+            let sceneStr = `[场景|${state.scene.location}`;
             if (state.scene.atmosphere) {
                 sceneStr += `|${state.scene.atmosphere}`;
             }
@@ -488,14 +486,14 @@ class HoraeManager {
             lines.push(sceneStr);
         }
         
-        // Nhân vật có mặt và trang phục
+        // 在场角色和服装
         if (sendCharacters) {
             const presentChars = state.scene.characters_present || [];
             
             if (presentChars.length > 0) {
                 const charStrs = [];
                 for (const char of presentChars) {
-                    // Khớp mờ trang phục
+                    // 模糊匹配服装
                     const costumeKey = Object.keys(state.costumes || {}).find(
                         k => k === char || k.includes(char) || char.includes(k)
                     );
@@ -505,19 +503,19 @@ class HoraeManager {
                         charStrs.push(char);
                     }
                 }
-                lines.push(`[Có mặt|${charStrs.join('|')}]`);
+                lines.push(`[在场|${charStrs.join('|')}]`);
             }
         }
         
-        // Vật phẩm
+        // 物品
         if (sendItems) {
             const items = Object.entries(state.items);
             if (items.length > 0) {
-                lines.push('\n[Danh sách vật phẩm]');
+                lines.push('\n[物品清单]');
                 for (const [name, info] of items) {
                     const id = info._id || '???';
                     const icon = info.icon || '';
-                    const imp = info.importance === '!!' ? 'Then chốt' : info.importance === '!' ? 'Quan trọng' : '';
+                    const imp = info.importance === '!!' ? '关键' : info.importance === '!' ? '重要' : '';
                     const desc = info.description ? ` | ${info.description}` : '';
                     const holder = info.holder || '';
                     const loc = info.location ? `@${info.location}` : '';
@@ -525,49 +523,49 @@ class HoraeManager {
                     lines.push(`#${id} ${icon}${name}${impTag}${desc} = ${holder}${loc}`);
                 }
             } else {
-                lines.push('\n[Danh sách vật phẩm] (Trống)');
+                lines.push('\n[物品清单] (空)');
             }
         }
         
-        // Độ hảo cảm
+        // 好感度
         if (sendCharacters) {
             const affections = Object.entries(state.affection).filter(([_, v]) => v !== 0);
             if (affections.length > 0) {
                 const affStr = affections.map(([k, v]) => `${k}:${v > 0 ? '+' : ''}${v}`).join('|');
-                lines.push(`[Hảo cảm|${affStr}]`);
+                lines.push(`[好感|${affStr}]`);
             }
             
-            // Thông tin NPC
+            // NPC信息
             const npcs = Object.entries(state.npcs);
             if (npcs.length > 0) {
-                lines.push('\n[NPC đã biết]');
+                lines.push('\n[已知NPC]');
                 for (const [name, info] of npcs) {
                     const id = info._id || '?';
                     const app = info.appearance || '';
                     const per = info.personality || '';
                     const rel = info.relationship || '';
-                    // Chủ thể: N(Số) Tên | Ngoại hình=Tính cách@Quan hệ
+                    // 主体：N编号 名｜外貌=性格@关系
                     let npcStr = `N${id} ${name}`;
                     if (app || per || rel) {
                         npcStr += `｜${app}=${per}@${rel}`;
                     }
-                    // Trường mở rộng
+                    // 扩展字段
                     const extras = [];
-                    if (info.gender) extras.push(`Giới tính:${info.gender}`);
+                    if (info.gender) extras.push(`性别:${info.gender}`);
                     if (info.age) {
                         const ageResult = this.calcCurrentAge(info, state.timestamp.story_date);
-                        extras.push(`Tuổi:${ageResult.display}`);
+                        extras.push(`年龄:${ageResult.display}`);
                     }
-                    if (info.race) extras.push(`Chủng tộc:${info.race}`);
-                    if (info.job) extras.push(`Nghề nghiệp:${info.job}`);
-                    if (info.note) extras.push(`Bổ sung:${info.note}`);
+                    if (info.race) extras.push(`种族:${info.race}`);
+                    if (info.job) extras.push(`职业:${info.job}`);
+                    if (info.note) extras.push(`补充:${info.note}`);
                     if (extras.length > 0) npcStr += `~${extras.join('~')}`;
                     lines.push(npcStr);
                 }
             }
         }
         
-        // Việc cần làm
+        // 待办事项
         const chatForAgenda = this.getChat();
         const allAgendaItems = [];
         const seenTexts = new Set();
@@ -578,7 +576,7 @@ class HoraeManager {
                 seenTexts.add(item.text);
             }
         }
-        // AI ghi
+        // AI写入的
         if (chatForAgenda) {
             for (let i = 1; i < chatForAgenda.length; i++) {
                 const msgAgenda = chatForAgenda[i].horae_meta?.agenda;
@@ -594,24 +592,24 @@ class HoraeManager {
         }
         const activeAgenda = allAgendaItems.filter(a => !a.done);
         if (activeAgenda.length > 0) {
-            lines.push('\n[Việc cần làm]');
+            lines.push('\n[待办事项]');
             for (const item of activeAgenda) {
                 const datePrefix = item.date ? `${item.date} ` : '';
                 lines.push(`· ${datePrefix}${item.text}`);
             }
         }
         
-        // Quỹ đạo cốt truyện
+        // 剧情轨迹
         if (sendTimeline) {
-            const events = this.getEvents(100, 'all');  // Lấy nhiều sự kiện hơn
+            const events = this.getEvents(100, 'all');  // 获取更多事件
             if (events.length > 0) {
-                lines.push('\n[Quỹ đạo cốt truyện]');
+                lines.push('\n[剧情轨迹]');
                 
                 const currentDate = state.timestamp?.story_date || '';
                 
                 const getLevelMark = (level) => {
-                    if (level === '关键' || level === 'Then chốt') return '★';
-                    if (level === '重要' || level === 'Quan trọng') return '●';
+                    if (level === '关键') return '★';
+                    if (level === '重要') return '●';
                     return '○';
                 };
                 
@@ -622,61 +620,61 @@ class HoraeManager {
                     
                     const { days, fromDate, toDate } = result;
                     
-                    if (days === 0) return '(Hôm nay)';
-                    if (days === 1) return '(Hôm qua)';
-                    if (days === 2) return '(Hôm kia)';
-                    if (days === 3) return '(3 ngày trước)';
-                    if (days === -1) return '(Ngày mai)';
-                    if (days === -2) return '(Ngày kia)';
-                    if (days === -3) return '(3 ngày nữa)';
+                    if (days === 0) return '(今天)';
+                    if (days === 1) return '(昨天)';
+                    if (days === 2) return '(前天)';
+                    if (days === 3) return '(大前天)';
+                    if (days === -1) return '(明天)';
+                    if (days === -2) return '(后天)';
+                    if (days === -3) return '(大后天)';
                     
-                    // Thứ mấy tuần trước (4-13 ngày trước và có thông tin ngày)
+                    // 上周几（4-13天前且有日期信息）
                     if (days >= 4 && days <= 13 && fromDate) {
-                        const WEEKDAY_NAMES = ['CN', 'Hai', 'Ba', 'Tư', 'Năm', 'Sáu', 'Bảy'];
+                        const WEEKDAY_NAMES = ['日', '一', '二', '三', '四', '五', '六'];
                         const weekday = fromDate.getDay();
-                        return `(Thứ ${WEEKDAY_NAMES[weekday]} tuần trước)`;
+                        return `(上周${WEEKDAY_NAMES[weekday]})`;
                     }
                     
-                    // Tháng trước
+                    // 上个月
                     if (days >= 20 && days < 60 && fromDate && toDate) {
                         const fromMonth = fromDate.getMonth();
                         const toMonth = toDate.getMonth();
                         if (fromMonth !== toMonth) {
-                            return `(Ngày ${fromDate.getDate()} tháng trước)`;
+                            return `(上个月${fromDate.getDate()}号)`;
                         }
                     }
                     
-                    // Năm ngoái
+                    // 去年
                     if (days >= 300 && fromDate && toDate) {
                         const fromYear = fromDate.getFullYear();
                         const toYear = toDate.getFullYear();
                         if (fromYear < toYear) {
                             const fromMonth = fromDate.getMonth() + 1;
-                            return `(Tháng ${fromMonth} năm ngoái)`;
+                            return `(去年${fromMonth}月)`;
                         }
                     }
                     
-                    // Định dạng chung
-                    if (days > 0 && days < 30) return `(${days} ngày trước)`;
-                    if (days > 0) return `(${Math.round(days / 30)} tháng trước)`;
+                    // 通用格式
+                    if (days > 0 && days < 30) return `(${days}天前)`;
+                    if (days > 0) return `(${Math.round(days / 30)}个月前)`;
                     if (days === -999 || days === -998 || days === -997) return '';
                     return '';
                 };
                 
-                // Sắp xếp theo thứ tự tin nhắn
+                // 按消息楼层排序
                 const sortedEvents = [...events].sort((a, b) => {
                     return (a.messageIndex || 0) - (b.messageIndex || 0);
                 });
                 
-                // Lọc: Tất cả Then chốt/Quan trọng + 30 sự kiện Bình thường gần nhất
+                // 筛选：关键/重要全部 + 最近30条一般
                 const criticalAndImportant = sortedEvents.filter(e => 
-                    e.event?.level === '关键' || e.event?.level === '重要' || e.event?.level === 'Then chốt' || e.event?.level === 'Quan trọng'
+                    e.event?.level === '关键' || e.event?.level === '重要'
                 );
                 const normalEvents = sortedEvents.filter(e => 
-                    e.event?.level === '一般' || e.event?.level === 'Bình thường' || !e.event?.level
-                ).slice(-30);  // Chỉ lấy 30 sự kiện thường gần nhất
+                    e.event?.level === '一般' || !e.event?.level
+                ).slice(-30);  // 只取最近30条一般事件
                 
-                // Hợp nhất và sắp xếp lại theo thứ tự
+                // 合并后按楼层排序
                 const allToShow = [...criticalAndImportant, ...normalEvents]
                     .sort((a, b) => (a.messageIndex || 0) - (b.messageIndex || 0));
                 
@@ -692,7 +690,7 @@ class HoraeManager {
             }
         }
         
-        // Dữ liệu bảng tùy chỉnh
+        // 自定义表格数据
         const chat = this.getChat();
         const firstMsg = chat?.[0];
         const customTables = firstMsg?.horae_meta?.customTables || this.settings?.customTables || [];
@@ -701,22 +699,22 @@ class HoraeManager {
             const cols = table.cols || 2;
             const data = table.data || {};
             
-            // Có nội dung hoặc có hướng dẫn điền mới xuất ra
+            // 有内容或有填表说明才输出
             const hasContent = Object.values(data).some(v => v && v.trim());
             const hasPrompt = table.prompt && table.prompt.trim();
             if (!hasContent && !hasPrompt) continue;
             
-            const tableName = table.name || 'Bảng tùy chỉnh';
+            const tableName = table.name || '自定义表格';
             lines.push(`\n[${tableName}]`);
             
             if (table.prompt && table.prompt.trim()) {
-                lines.push(`(Yêu cầu điền: ${table.prompt.trim()})`);
+                lines.push(`(填写要求: ${table.prompt.trim()})`);
             }
             
-            // Hiển thị thông minh: Ẩn cột trống và dòng trống cuối cùng
-            // 1. Kiểm tra các cột có dữ liệu
-            const activeCols = [0]; // col 0 = Tiêu đề hàng, luôn hiển thị
-            const emptyCols = [];   // Cột hoàn toàn không có dữ liệu
+            // 智能展示：隐藏空列和尾部空行
+            // 1. 检测有数据的列
+            const activeCols = [0]; // col 0 = 行标题，始终显示
+            const emptyCols = [];   // 完全空的数据列
             for (let c = 1; c < cols; c++) {
                 let colHasData = false;
                 for (let r = 1; r < rows; r++) {
@@ -732,7 +730,7 @@ class HoraeManager {
                 }
             }
             
-            // 2. Kiểm tra hàng cuối cùng có dữ liệu
+            // 2. 检测最后有数据的行
             let lastDataRow = 0;
             for (let r = rows - 1; r >= 1; r--) {
                 for (let c = 1; c < cols; c++) {
@@ -743,14 +741,14 @@ class HoraeManager {
                 }
                 if (lastDataRow > 0) break;
             }
-            // Ít nhất hiển thị dòng 1
+            // 至少显示第1行
             if (lastDataRow === 0) lastDataRow = 1;
             
-            // 3. Xuất hàng tiêu đề
-            const headerRow = activeCols.map(c => data[`0-${c}`] || (c === 0 ? 'Tiêu đề' : `Cột ${c}`));
+            // 3. 输出表头行
+            const headerRow = activeCols.map(c => data[`0-${c}`] || (c === 0 ? '表头' : `列${c}`));
             lines.push(headerRow.join(' | '));
             
-            // 4. Xuất các hàng dữ liệu
+            // 4. 输出数据行
             for (let r = 1; r <= lastDataRow; r++) {
                 const rowData = activeCols.map(c => {
                     if (c === 0) return data[`${r}-0`] || `${r}`;
@@ -759,41 +757,41 @@ class HoraeManager {
                 lines.push(rowData.join(' | '));
             }
             
-            // 5. Chú thích các dòng trống bị ẩn ở cuối
+            // 5. 标注被省略的尾部空行
             if (lastDataRow < rows - 1) {
-                lines.push(`(Tổng ${rows - 1} dòng, dòng ${lastDataRow + 1}-${rows - 1} tạm thời không có dữ liệu)`);
+                lines.push(`(共${rows - 1}行，第${lastDataRow + 1}-${rows - 1}行暂无数据)`);
             }
             
-            // 6. Nhắc nhở cột trống
+            // 6. 提示空列
             if (emptyCols.length > 0) {
-                const emptyColNames = emptyCols.map(c => data[`0-${c}`] || `Cột ${c}`);
-                lines.push(`(${emptyColNames.join('、')}：Tạm thời không có dữ liệu, cấm điền khi sự kiện tương ứng chưa xảy ra)`);
+                const emptyColNames = emptyCols.map(c => data[`0-${c}`] || `列${c}`);
+                lines.push(`(${emptyColNames.join('、')}：暂无数据，对应事件未发生时禁止填写)`);
             }
         }
         
         return lines.join('\n');
     }
 
-    /** Lấy mô tả cấp độ hảo cảm */
+    /** 获取好感度等级描述 */
     getAffectionLevel(value) {
-        if (value >= 80) return 'Tri kỷ';
-        if (value >= 60) return 'Thân mật';
-        if (value >= 40) return 'Có cảm tình';
-        if (value >= 20) return 'Thân thiện';
-        if (value >= 0) return 'Trung lập';
-        if (value >= -20) return 'Lạnh nhạt';
-        if (value >= -40) return 'Ghét bỏ';
-        if (value >= -60) return 'Thù địch';
-        return 'Căm thù';
+        if (value >= 80) return '挚爱';
+        if (value >= 60) return '亲密';
+        if (value >= 40) return '好感';
+        if (value >= 20) return '友好';
+        if (value >= 0) return '中立';
+        if (value >= -20) return '冷淡';
+        if (value >= -40) return '厌恶';
+        if (value >= -60) return '敌视';
+        return '仇恨';
     }
 
-    /** Phân tích thẻ horae trong phản hồi AI */
+    /** 解析AI回复中的horae标签 */
     parseHoraeTag(message) {
         if (!message) return null;
         
         let match = message.match(/<horae>([\s\S]*?)<\/horae>/i);
         if (!match) {
-            match = message.match(//i);
+            match = message.match(/<!--horae([\s\S]*?)-->/i);
         }
         
         const eventMatch = message.match(/<horaeevent>([\s\S]*?)<\/horaeevent>/i);
@@ -810,7 +808,7 @@ class HoraeManager {
             costumes: {},
             items: {},
             deletedItems: [],
-            events: [],  // Hỗ trợ nhiều sự kiện
+            events: [],  // 支持多个事件
             affection: {},
             npcs: {},
             scene: {},
@@ -822,34 +820,34 @@ class HoraeManager {
             const trimmedLine = line.trim();
             if (!trimmedLine) continue;
             
-            // time:10/1 15:00 hoặc time:Năm thứ 2931 Lịch Vĩnh Dạ ngày 1 tháng 2 (Sáu) 20:30
+            // time:10/1 15:00 或 time:小镇历永夜2931年 2月1日(五) 20:30
             if (trimmedLine.startsWith('time:')) {
                 const timeStr = trimmedLine.substring(5).trim();
-                // Tách thời gian đồng hồ HH:MM từ cuối
+                // 从末尾分离 HH:MM 时钟时间
                 const clockMatch = timeStr.match(/\b(\d{1,2}:\d{2})\s*$/);
                 if (clockMatch) {
                     result.timestamp.story_time = clockMatch[1];
                     result.timestamp.story_date = timeStr.substring(0, timeStr.lastIndexOf(clockMatch[1])).trim();
                 } else {
-                    // Không có giờ phút, toàn bộ chuỗi là ngày
+                    // 无时钟时间，整个字符串作为日期
                     result.timestamp.story_date = timeStr;
                     result.timestamp.story_time = '';
                 }
             }
-            // location:Tầng hai quán cà phê
+            // location:咖啡馆二楼
             else if (trimmedLine.startsWith('location:')) {
                 result.scene.location = trimmedLine.substring(9).trim();
             }
-            // atmosphere:Thư giãn
+            // atmosphere:轻松
             else if (trimmedLine.startsWith('atmosphere:')) {
                 result.scene.atmosphere = trimmedLine.substring(11).trim();
             }
-            // characters:Alice,Bob
+            // characters:爱丽丝,鲍勃
             else if (trimmedLine.startsWith('characters:')) {
                 const chars = trimmedLine.substring(11).trim();
                 result.scene.characters_present = chars.split(/[,，]/).map(c => c.trim()).filter(Boolean);
             }
-            // costume:Alice=Váy liền thân màu trắng
+            // costume:爱丽丝=白色连衣裙
             else if (trimmedLine.startsWith('costume:')) {
                 const costumeStr = trimmedLine.substring(8).trim();
                 const eqIndex = costumeStr.indexOf('=');
@@ -859,7 +857,7 @@ class HoraeManager {
                     result.costumes[char] = costume;
                 }
             }
-            // item-:Tên vật phẩm biểu thị vật phẩm đã tiêu hao/xóa
+            // item-:物品名 表示物品已消耗/删除
             else if (trimmedLine.startsWith('item-:')) {
                 const itemName = trimmedLine.substring(6).trim();
                 const cleanName = itemName.replace(/^[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u, '').trim();
@@ -867,15 +865,15 @@ class HoraeManager {
                     result.deletedItems.push(cleanName);
                 }
             }
-            // item:🍺Bia mạch nha kém chất lượng|Mô tả=Quán rượu@Quầy bar / item!:📜Vật phẩm quan trọng|Mô tả chức năng đặc biệt=Nhân vật@Vị trí / item!!:💎Vật phẩm then chốt=@Vị trí
+            // item:🍺劣质麦酒|描述=酒馆@吧台 / item!:📜重要物品|特殊功能描述=角色@位置 / item!!:💎关键物品=@位置
             else if (trimmedLine.startsWith('item!!:') || trimmedLine.startsWith('item!:') || trimmedLine.startsWith('item:')) {
-                let importance = '';  // Mặc định là chuỗi rỗng
+                let importance = '';  // 一般用空字符串
                 let itemStr;
                 if (trimmedLine.startsWith('item!!:')) {
-                    importance = '!!';  // Then chốt
+                    importance = '!!';  // 关键
                     itemStr = trimmedLine.substring(7).trim();
                 } else if (trimmedLine.startsWith('item!:')) {
-                    importance = '!';   // Quan trọng
+                    importance = '!';   // 重要
                     itemStr = trimmedLine.substring(6).trim();
                 } else {
                     itemStr = trimmedLine.substring(5).trim();
@@ -888,7 +886,7 @@ class HoraeManager {
                     
                     let icon = null;
                     let itemName = itemNamePart;
-                    let description = undefined;  // undefined = không có trường mô tả, khi hợp nhất sẽ không ghi đè mô tả cũ
+                    let description = undefined;  // undefined = 合并时不覆盖原有描述
                     
                     const emojiMatch = itemNamePart.match(/^([\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{1F600}-\u{1F64F}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{1F900}-\u{1F9FF}]|[\u{1FA00}-\u{1FA6F}]|[\u{1FA70}-\u{1FAFF}]|[\u{231A}-\u{231B}]|[\u{23E9}-\u{23F3}]|[\u{23F8}-\u{23FA}]|[\u{25AA}-\u{25AB}]|[\u{25B6}]|[\u{25C0}]|[\u{25FB}-\u{25FE}]|[\u{2614}-\u{2615}]|[\u{2648}-\u{2653}]|[\u{267F}]|[\u{2693}]|[\u{26A1}]|[\u{26AA}-\u{26AB}]|[\u{26BD}-\u{26BE}]|[\u{26C4}-\u{26C5}]|[\u{26CE}]|[\u{26D4}]|[\u{26EA}]|[\u{26F2}-\u{26F3}]|[\u{26F5}]|[\u{26FA}]|[\u{26FD}]|[\u{2702}]|[\u{2705}]|[\u{2708}-\u{270D}]|[\u{270F}]|[\u{2712}]|[\u{2714}]|[\u{2716}]|[\u{271D}]|[\u{2721}]|[\u{2728}]|[\u{2733}-\u{2734}]|[\u{2744}]|[\u{2747}]|[\u{274C}]|[\u{274E}]|[\u{2753}-\u{2755}]|[\u{2757}]|[\u{2763}-\u{2764}]|[\u{2795}-\u{2797}]|[\u{27A1}]|[\u{27B0}]|[\u{27BF}]|[\u{2934}-\u{2935}]|[\u{2B05}-\u{2B07}]|[\u{2B1B}-\u{2B1C}]|[\u{2B50}]|[\u{2B55}]|[\u{3030}]|[\u{303D}]|[\u{3297}]|[\u{3299}])/u);
                     if (emojiMatch) {
@@ -905,7 +903,7 @@ class HoraeManager {
                         itemName = itemNamePart;
                     }
                     
-                    // Loại bỏ đánh dấu số lượng vô nghĩa
+                    // 去掉无意义的数量标记
                     itemName = itemName.replace(/[\(（]1[\)）]$/, '').trim();
                     itemName = itemName.replace(new RegExp(`[\\(（]1[${COUNTING_CLASSIFIERS}][\\)）]$`), '').trim();
                     itemName = itemName.replace(new RegExp(`[\\(（][${COUNTING_CLASSIFIERS}][\\)）]$`), '').trim();
@@ -921,7 +919,7 @@ class HoraeManager {
                     result.items[itemName] = itemInfo;
                 }
             }
-            // event:Quan trọng|Alice thú nhận bí mật
+            // event:重要|爱丽丝坦白了秘密
             else if (trimmedLine.startsWith('event:')) {
                 const eventStr = trimmedLine.substring(6).trim();
                 const parts = eventStr.split('|');
@@ -929,10 +927,10 @@ class HoraeManager {
                     const levelRaw = parts[0].trim();
                     const summary = parts.slice(1).join('|').trim();
                     
-                    let level = '一般'; // Bình thường
-                    if (levelRaw === '关键' || levelRaw === 'Then chốt' || levelRaw.toLowerCase() === 'critical') {
+                    let level = '一般';
+                    if (levelRaw === '关键' || levelRaw.toLowerCase() === 'critical') {
                         level = '关键';
-                    } else if (levelRaw === '重要' || levelRaw === 'Quan trọng' || levelRaw.toLowerCase() === 'important') {
+                    } else if (levelRaw === '重要' || levelRaw.toLowerCase() === 'important') {
                         level = '重要';
                     }
                     
@@ -943,18 +941,18 @@ class HoraeManager {
                     });
                 }
             }
-            // affection:Bob=65 hoặc affection:Bob+5 (tương thích định dạng cũ và mới)
-            // Cho phép AI thêm chú thích như affection:Tom=18(+0)|Quan sát thấy xxx, chỉ trích xuất tên và giá trị
+            // affection:鲍勃=65 或 affection:鲍勃+5（兼容新旧格式）
+            // 容忍AI附加注解如 affection:汤姆=18(+0)|观察到xxx，只提取名字和数值
             else if (trimmedLine.startsWith('affection:')) {
                 const affStr = trimmedLine.substring(10).trim();
-                // Định dạng mới: Tên=Giá trị (Giá trị tuyệt đối, cho phép dấu +/- như =+28 hoặc =-15)
+                // 新格式：角色名=数值（绝对值，允许带正负号如 =+28 或 =-15）
                 const absoluteMatch = affStr.match(/^(.+?)=\s*([+\-]?\d+)/);
                 if (absoluteMatch) {
                     const key = absoluteMatch[1].trim();
                     const value = parseInt(absoluteMatch[2]);
                     result.affection[key] = { type: 'absolute', value: value };
                 } else {
-                    // Định dạng cũ: Tên+/-Giá trị (Giá trị tương đối, không có dấu =) - Cho phép chú thích sau giá trị
+                    // 旧格式：角色名+/-数值（相对值，无=号）— 允许数值后跟任意注解
                     const relativeMatch = affStr.match(/^(.+?)([+\-]\d+)/);
                     if (relativeMatch) {
                         const key = relativeMatch[1].trim();
@@ -963,8 +961,8 @@ class HoraeManager {
                     }
                 }
             }
-            // npc:Tên|Ngoại hình=Tính cách@Quan hệ~Giới tính:Nam~Tuổi:25~Chủng tộc:Nhân loại~Nghề nghiệp:Lính đánh thuê~Bổ sung:xxx
-            // Sử dụng ~ phân cách các trường mở rộng (key:value), không phụ thuộc thứ tự
+            // npc:名|外貌=性格@关系~性别:男~年龄:25~种族:人类~职业:佣兵~补充:xxx
+            // 使用 ~ 分隔扩展字段（key:value），不依赖顺序
             else if (trimmedLine.startsWith('npc:')) {
                 const npcStr = trimmedLine.substring(4).trim();
                 const npcInfo = this._parseNpcFields(npcStr);
@@ -979,7 +977,7 @@ class HoraeManager {
                     result.npcs[name] = npcInfo;
                 }
             }
-            // agenda-:Nội dung việc cần làm đã hoàn thành / agenda:Ngày lập|Nội dung
+            // agenda-:已完成待办内容 / agenda:订立日期|内容
             else if (trimmedLine.startsWith('agenda-:')) {
                 const delStr = trimmedLine.substring(8).trim();
                 if (delStr) {
@@ -1000,13 +998,13 @@ class HoraeManager {
                         result.agenda.push({ date: dateStr, text, source: 'ai', done: false });
                     }
                 } else if (agendaStr) {
-                    // Chấp nhận lỗi: Không có dấu phân cách ngày
+                    // 容错：无日期分隔
                     result.agenda.push({ date: '', text: agendaStr, source: 'ai', done: false });
                 }
             }
         }
 
-        // Phân tích dữ liệu bảng tùy chỉnh
+        // 解析自定义表格数据
         if (tableMatches.length > 0) {
             result.tableUpdates = [];
             for (const tm of tableMatches) {
@@ -1023,7 +1021,7 @@ class HoraeManager {
         return result;
     }
 
-    /** Hợp nhất kết quả phân tích vào meta */
+    /** 将解析结果合并到元数据 */
     mergeParsedToMeta(baseMeta, parsed) {
         const meta = baseMeta ? JSON.parse(JSON.stringify(baseMeta)) : createEmptyMeta();
         
@@ -1058,11 +1056,11 @@ class HoraeManager {
             meta.deletedItems = [...new Set([...meta.deletedItems, ...parsed.deletedItems])];
         }
         
-        // Hỗ trợ định dạng mới (mảng events) và định dạng cũ (event đơn lẻ)
+        // 支持新格式（events数组）和旧格式（单个event）
         if (parsed.events && parsed.events.length > 0) {
             meta.events = parsed.events;
         } else if (parsed.event) {
-            // Tương thích cũ: Chuyển thành mảng
+            // 兼容旧格式：转换为数组
             meta.events = [parsed.event];
         }
         
@@ -1074,11 +1072,11 @@ class HoraeManager {
             Object.assign(meta.npcs, parsed.npcs);
         }
         
-        // Thêm việc cần làm do AI ghi
+        // 追加AI写入的待办
         if (parsed.agenda && parsed.agenda.length > 0) {
             if (!meta.agenda) meta.agenda = [];
             for (const item of parsed.agenda) {
-                // Khử trùng lặp
+                // 去重
                 const isDupe = meta.agenda.some(a => a.text === item.text);
                 if (!isDupe) {
                     meta.agenda.push(item);
@@ -1086,7 +1084,7 @@ class HoraeManager {
             }
         }
         
-        // tableUpdates truyền dưới dạng thuộc tính phụ
+        // tableUpdates 作为副属性传递
         if (parsed.tableUpdates) {
             meta._tableUpdates = parsed.tableUpdates;
         }
@@ -1094,14 +1092,14 @@ class HoraeManager {
         return meta;
     }
 
-    /** Xóa toàn cục các việc cần làm đã hoàn thành */
+    /** 全局删除已完成的待办事项 */
     removeCompletedAgenda(deletedTexts) {
         const chat = this.getChat();
         if (!chat || deletedTexts.length === 0) return;
 
         const isMatch = (agendaText, deleteText) => {
             if (!agendaText || !deleteText) return false;
-            // Khớp chính xác hoặc bao gồm lẫn nhau (cho phép AI viết tắt/mở rộng)
+            // 精确匹配 或 互相包含（允许AI缩写/扩写）
             return agendaText === deleteText ||
                    agendaText.includes(deleteText) ||
                    deleteText.includes(agendaText);
@@ -1122,7 +1120,7 @@ class HoraeManager {
         }
     }
 
-    /** Xử lý phản hồi AI, phân tích thẻ và lưu meta */
+    /** 处理AI回复，解析标签并存储元数据 */
     processAIResponse(messageIndex, messageContent) {
         const parsed = this.parseHoraeTag(messageContent);
         
@@ -1130,15 +1128,15 @@ class HoraeManager {
             const existingMeta = this.getMessageMeta(messageIndex);
             const newMeta = this.mergeParsedToMeta(existingMeta, parsed);
             
-            // Xử lý cập nhật bảng
+            // 处理表格更新
             if (newMeta._tableUpdates) {
-                // Ghi lại đóng góp bảng để phục vụ rollback
+                // 记录表格贡献，用于回退
                 newMeta.tableContributions = newMeta._tableUpdates;
                 this.applyTableUpdates(newMeta._tableUpdates);
                 delete newMeta._tableUpdates;
             }
             
-            // Xử lý việc cần làm mà AI đánh dấu đã hoàn thành
+            // 处理AI标记已完成的待办
             if (parsed.deletedAgenda && parsed.deletedAgenda.length > 0) {
                 this.removeCompletedAgenda(parsed.deletedAgenda);
             }
@@ -1146,7 +1144,7 @@ class HoraeManager {
             this.setMessageMeta(messageIndex, newMeta);
             return true;
         } else {
-            // Không có thẻ, tạo meta rỗng
+            // 无标签，创建空元数据
             if (!this.getMessageMeta(messageIndex)) {
                 this.setMessageMeta(messageIndex, createEmptyMeta());
             }
@@ -1155,16 +1153,16 @@ class HoraeManager {
     }
 
     /**
-     * Phân tích các trường NPC
-     * Định dạng: Tên|Ngoại hình=Tính cách@Quan hệ~Giới tính:Nam~Tuổi:25~Chủng tộc:Nhân loại~Nghề nghiệp:Lính đánh thuê~Bổ sung:xxx
+     * 解析NPC字段
+     * 格式: 名|外貌=性格@关系~性别:男~年龄:25~种族:人类~职业:佣兵~补充:xxx
      */
     _parseNpcFields(npcStr) {
         const info = {};
         if (!npcStr) return { _name: '' };
         
-        // 1. Tách các trường mở rộng
+        // 1. 分离扩展字段
         const tildeParts = npcStr.split('~');
-        const mainPart = tildeParts[0].trim(); // Tên|Ngoại hình=Tính cách@Quan hệ
+        const mainPart = tildeParts[0].trim(); // 名|外貌=性格@关系
         
         for (let i = 1; i < tildeParts.length; i++) {
             const kv = tildeParts[i].trim();
@@ -1175,15 +1173,15 @@ class HoraeManager {
             const value = kv.substring(colonIdx + 1).trim();
             if (!value) continue;
             
-            // Khớp từ khóa (Hỗ trợ tiếng Việt)
-            if (/^(性别|gender|sex|giới tính)$/i.test(key)) info.gender = value;
-            else if (/^(年龄|age|tuổi)$/i.test(key)) info.age = value;
-            else if (/^(种族|race|族裔|族群|chủng tộc)$/i.test(key)) info.race = value;
-            else if (/^(职业|job|class|职务|身份|nghề nghiệp|nghề)$/i.test(key)) info.job = value;
-            else if (/^(补充|note|备注|其他|bổ sung|ghi chú)$/i.test(key)) info.note = value;
+            // 关键词匹配
+            if (/^(性别|gender|sex)$/i.test(key)) info.gender = value;
+            else if (/^(年龄|age|年纪)$/i.test(key)) info.age = value;
+            else if (/^(种族|race|族裔|族群)$/i.test(key)) info.race = value;
+            else if (/^(职业|job|class|职务|身份)$/i.test(key)) info.job = value;
+            else if (/^(补充|note|备注|其他)$/i.test(key)) info.note = value;
         }
         
-        // 2. Phân tích phần chính
+        // 2. 解析主体
         let name = '';
         const pipeIdx = mainPart.indexOf('|');
         if (pipeIdx > 0) {
@@ -1219,8 +1217,8 @@ class HoraeManager {
     }
 
     /**
-     * Phân tích dữ liệu ô trong bảng
-     * Định dạng: Mỗi ô một dòng 1,1:Nội dung Hoặc nhiều ô trên một dòng phân cách bằng |
+     * 解析表格单元格数据
+     * 格式: 每行一格 1,1:内容 或 单行多格用 | 分隔
      */
     _parseTableCellEntries(text) {
         const updates = {};
@@ -1232,7 +1230,7 @@ class HoraeManager {
             const trimmed = line.trim();
             if (!trimmed) continue;
             
-            // Tách bằng |
+            // 按 | 分割
             const segments = trimmed.split(/\s*[|｜]\s*/);
             
             for (const seg of segments) {
@@ -1244,8 +1242,8 @@ class HoraeManager {
                     const r = parseInt(m[1]);
                     const c = parseInt(m[2]);
                     const value = m[3].trim();
-                    // Lọc bỏ đánh dấu trống
-                    if (value && !/^[\(\（]?(空|Trống|trống)[\)\）]?$/.test(value) && !/^[-—]+$/.test(value)) {
+                    // 过滤空标记
+                    if (value && !/^[\(\（]?空[\)\）]?$/.test(value) && !/^[-—]+$/.test(value)) {
                         updates[`${r}-${c}`] = value;
                     }
                 }
@@ -1255,7 +1253,7 @@ class HoraeManager {
         return updates;
     }
 
-    /** Ghi cập nhật bảng vào chat[0] */
+    /** 将表格更新写入 chat[0] */
     applyTableUpdates(tableUpdates) {
         if (!tableUpdates || tableUpdates.length === 0) return;
         
@@ -1269,11 +1267,11 @@ class HoraeManager {
         const tables = firstMsg.horae_meta.customTables;
         
         for (const update of tableUpdates) {
-            // Tìm bảng tương ứng
+            // 查找对应表格
             const updateName = (update.name || '').trim();
             const table = tables.find(t => (t.name || '').trim() === updateName);
             if (!table) {
-                console.warn(`[Horae] Bảng "${updateName}" không tồn tại (các bảng hiện có: ${tables.map(t => t.name).join(', ')}), bỏ qua`);
+                console.warn(`[Horae] 表格 "${updateName}" 不存在（已有表格：${tables.map(t => t.name).join(', ')}），跳过`);
                 continue;
             }
             
@@ -1281,15 +1279,15 @@ class HoraeManager {
             
             let updatedCount = 0;
             
-            // Ghi ô, tự động mở rộng, bảo vệ tiêu đề
+            // 写入单元格，自动扩展，保护表头
             for (const [key, value] of Object.entries(update.updates)) {
                 const [r, c] = key.split('-').map(Number);
                 
-                // Bảo vệ tiêu đề
+                // 保护表头
                 if (r === 0 || c === 0) {
                     const existing = table.data[key];
                     if (existing && existing.trim()) {
-                        console.log(`[Horae] Bảng "${updateName}" bỏ qua ô tiêu đề [${r},${c}] (đã có: "${existing}")`);
+                        console.log(`[Horae] 表格 "${updateName}" 跳过表头单元格 [${r},${c}]（已有: "${existing}"）`);
                         continue;
                     }
                 }
@@ -1301,11 +1299,11 @@ class HoraeManager {
                 if (c + 1 > (table.cols || 2)) table.cols = c + 1;
             }
             
-            console.log(`[Horae] Bảng "${updateName}" đã cập nhật ${updatedCount} ô`);
+            console.log(`[Horae] 表格 "${updateName}" 已更新 ${updatedCount} 个单元格`);
         }
     }
 
-    /** Tái tạo dữ liệu bảng (duy trì tính nhất quán khi xóa/sửa tin nhắn) */
+    /** 重建表格数据（消息删除/编辑后保持一致性） */
     rebuildTableData() {
         const chat = this.getChat();
         if (!chat || chat.length === 0) return;
@@ -1315,12 +1313,12 @@ class HoraeManager {
         
         const tables = firstMsg.horae_meta.customTables;
         
-        // 1. Khôi phục về bản chụp baseData
+        // 1. 恢复到 baseData 快照
         for (const table of tables) {
             if (table.baseData) {
                 table.data = JSON.parse(JSON.stringify(table.baseData));
             } else {
-                // Không có baseData: Xóa vùng dữ liệu, giữ tiêu đề
+                // 无 baseData：清空数据区，保留表头
                 if (!table.data) { table.data = {}; continue; }
                 const keysToDelete = [];
                 for (const key of Object.keys(table.data)) {
@@ -1333,7 +1331,7 @@ class HoraeManager {
             if (table.baseRows !== undefined) {
                 table.rows = table.baseRows;
             } else if (table.baseData) {
-                // Không có baseRows, suy ra từ baseData
+                // 无 baseRows，从 baseData 推算
                 let calcRows = 2, calcCols = 2;
                 for (const key of Object.keys(table.baseData)) {
                     const [r, c] = key.split('-').map(Number);
@@ -1348,7 +1346,7 @@ class HoraeManager {
             }
         }
         
-        // 2. Phát lại tableContributions theo thứ tự tin nhắn
+        // 2. 按消息顺序回放 tableContributions
         let totalApplied = 0;
         for (let i = 0; i < chat.length; i++) {
             const meta = chat[i].horae_meta;
@@ -1358,10 +1356,10 @@ class HoraeManager {
             }
         }
         
-        console.log(`[Horae] Dữ liệu bảng đã được tái tạo, đã phát lại đóng góp bảng của ${totalApplied} tin nhắn`);
+        console.log(`[Horae] 表格数据已重建，回放了 ${totalApplied} 条消息的表格贡献`);
     }
 
-    /** Quét và tiêm lịch sử */
+    /** 扫描并注入历史记录 */
     async scanAndInjectHistory(progressCallback, analyzeCallback = null) {
         const chat = this.getChat();
         let processed = 0;
@@ -1378,7 +1376,7 @@ class HoraeManager {
                 continue;
             }
 
-            // Bỏ qua meta đã có
+            // 跳过已有元数据
             const hasEvents = message.horae_meta?.events?.length > 0 || message.horae_meta?.event?.summary;
             if (message.horae_meta && (
                 message.horae_meta.timestamp?.story_date ||
@@ -1396,7 +1394,7 @@ class HoraeManager {
             
             if (parsed) {
                 const meta = this.mergeParsedToMeta(null, parsed);
-                // Ghi lại đóng góp bảng
+                // 记录表格贡献
                 if (meta._tableUpdates) {
                     meta.tableContributions = meta._tableUpdates;
                     delete meta._tableUpdates;
@@ -1416,7 +1414,7 @@ class HoraeManager {
                         processed++;
                     }
                 } catch (error) {
-                    console.error(`[Horae] Phân tích tin nhắn #${i} thất bại:`, error);
+                    console.error(`[Horae] 分析消息 #${i} 失败:`, error);
                 }
             } else {
                 const meta = createEmptyMeta();
@@ -1432,10 +1430,10 @@ class HoraeManager {
         return { processed, skipped };
     }
 
-    /** Tạo nội dung bổ sung cho System Prompt (Quan trọng: Hướng dẫn AI) */
+    /** 生成系统提示词附加内容 */
     generateSystemPromptAddition() {
-        const userName = this.context?.name1 || 'Nhân vật chính';
-        const charName = this.context?.name2 || 'Nhân vật';
+        const userName = this.context?.name1 || '主角';
+        const charName = this.context?.name2 || '角色';
         
         return `
 【Horae记忆系统】（以下示例仅为示范，勿直接原句用于正文！）
